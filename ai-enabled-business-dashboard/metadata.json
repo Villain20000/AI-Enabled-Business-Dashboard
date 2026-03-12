@@ -1,5 +1,0 @@
-{
-  "name": "AI-Enabled Business Dashboard",
-  "description": "Internal tool for data visualization and AI-driven insights using Next.js, Supabase, and AI.",
-  "requestFramePermissions": []
-}
