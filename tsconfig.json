@@ -1,28 +1,78 @@
+/**
+ * TypeScript Configuration File
+ * 
+ * This file configures the TypeScript compiler for the Next.js application.
+ * It defines compiler options, path aliases, and which files to include/exclude.
+ * 
+ * @see https://www.typescriptlang.org/docs/handbook/tsconfig-json.html
+ * @see https://nextjs.org/docs/app/building-your-application/configuring/typescript
+ */
 {
+  // Compiler options control how TypeScript behaves
   "compilerOptions": {
+    // Target ECMAScript version - ES2017 for broad browser compatibility
     "target": "ES2017",
+    
+    // Library files to include when compiling
+    // - dom: DOM APIs (window, document, etc.)
+    // - dom.iterable: Iterable DOM collections
+    // - esnext: Latest ECMAScript features
     "lib": ["dom", "dom.iterable", "esnext"],
+    
+    // Allow JavaScript files to be compiled (useful for gradual migration)
     "allowJs": true,
+    
+    // Skip type checking of declaration files (improves build speed)
     "skipLibCheck": true,
+    
+    // Enable strict type checking (recommended for catching bugs early)
     "strict": true,
+    
+    // Do not emit outputs (Next.js handles transpilation)
     "noEmit": true,
+    
+    // Enable interoperability between CommonJS and ES Modules
     "esModuleInterop": true,
+    
+    // Module system - use ESNext modules (required for Next.js App Router)
     "module": "esnext",
+    
+    // How to resolve modules - 'bundler' is optimized for Next.js
     "moduleResolution": "bundler",
+    
+    // Allow importing JSON files as modules
     "resolveJsonModule": true,
+    
+    // Ensure each file can be transpiled independently (important for Next.js)
     "isolatedModules": true,
+    
+    // Preserve JSX as-is for Next.js to handle (next transforms JSX)
     "jsx": "preserve",
+    
+    // Enable incremental compilation for faster rebuilds
     "incremental": true,
+    
+    // Next.js TypeScript plugins
     "plugins": [
       {
         "name": "next"
       }
     ],
+    
+    // Base URL for path resolution
     "baseUrl": ".",
+    
+    // Path aliases - @/* maps to ./* (root directory)
+    // This allows importing like: import Button from '@/components/ui/button'
     "paths": {
       "@/*": ["./*"]
     }
   },
+  
+  // Files to include in the TypeScript compilation
+  // Includes Next.js type definitions, all TS/TSX files, and generated types
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  
+  // Files to exclude from compilation
   "exclude": ["node_modules"]
 }
