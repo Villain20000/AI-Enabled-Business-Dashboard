@@ -1,293 +1,304 @@
-# AI-Enabled Business Dashboard
+# DataCore AI — Enterprise SaaS
 
-A comprehensive business intelligence dashboard built with Next.js 15, featuring AI-powered insights and natural language query capabilities. The dashboard is designed for pharmaceutical company data visualization with real-time metrics, inventory tracking, and intelligent analytics.
+A multi-tenant SaaS business intelligence platform built with Next.js 15,
+Supabase, Stripe, and Google Gemini. Features AI-powered insights, natural
+language queries, role-based access control, team management, API keys,
+audit logging, and subscription billing.
 
 ![Dashboard Preview](https://picsum.photos/seed/dashboard/800/400)
 
-## 📋 Project Overview
+## Overview
 
-This application provides a modern, interactive dashboard for business data analysis. It combines traditional business intelligence features with cutting-edge AI capabilities to deliver actionable insights.
+DataCore AI is a production-ready SaaS application that transforms the
+single-user demo dashboard into a full enterprise product with:
 
-### Key Features
+- **Multi-tenant organizations** with Postgres Row-Level Security isolation
+- **Authentication** via Supabase Auth (email/password + Google/GitHub SSO)
+- **RBAC** with four roles: Owner, Admin, Member, Viewer
+- **Stripe billing** with Free / Pro / Enterprise plans and feature gating
+- **Team management** with email invitations and role assignment
+- **API keys** with hashed storage and usage metering
+- **Audit logging** of every mutating action
+- **AI insights** and natural language queries (Gemini) with plan-based limits
+- **Security hardening**: CSP headers, CSRF protection, rate limiting,
+  input validation, HTML sanitization, httpOnly cookies
 
-- **📊 KPI Cards**: Display key business metrics with trend indicators
-- **📈 Sales Charts**: Visual comparison of actual sales vs targets
-- **📦 Inventory Management**: Track product stock levels with status indicators
-- **🤖 AI Insights Engine**: Generate AI-powered business insights from your data
-- **💬 Natural Language Query**: Ask questions about your data in plain English
-- **🔔 Alert System**: Configure automated alerts for KPI thresholds
-- **🎨 Modern UI**: Clean, professional interface with responsive design
-
-## 🚀 Installation Instructions
-
-### Prerequisites
-
-- Node.js 18.x or higher
-- npm or yarn package manager
-- (Optional) Supabase account for database
-- (Optional) Google Gemini API key for AI features
-
-### Quick Start
-
-1. **Clone the repository**
-
-```bash
-git clone <repository-url>
-cd AI-Enabled-Business-Dashboard
-```
-
-2. **Install dependencies**
-
-```bash
-npm install
-# or
-yarn install
-```
-
-3. **Set up environment variables**
-
-Create a `.env.local` file in the root directory:
-
-```bash
-# Supabase Configuration (Optional - uses mock data by default)
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-
-# Google Gemini API Key (Optional - AI features require this)
-NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
-```
-
-4. **Start the development server**
-
-```bash
-npm run dev
-```
-
-5. **Open in browser**
-
-Navigate to [http://localhost:3000](http://localhost:3000)
-
-## 📖 Usage Examples
-
-### Dashboard Features
-
-#### Viewing KPIs
-
-The main dashboard displays three key performance indicators:
-- **Total Revenue**: Financial performance metric
-- **Active Users**: User engagement metric  
-- **Inventory Alerts**: Supply chain health indicator
-
-Each KPI shows current value and month-over-month change percentage.
-
-#### Sales Analysis
-
-The Sales vs Target chart provides visual comparison between actual sales and targets across months, helping identify performance trends and gaps.
-
-#### Inventory Tracking
-
-The Inventory Status table shows product stock levels with color-coded status badges:
-- 🟢 **Green (Healthy)**: Adequate stock
-- 🟡 **Amber (Low)**: Stock running low
-- 🔴 **Red (Critical)**: Urgent restock needed
-
-### AI Features
-
-#### Generating Insights
-
-1. Navigate to the main dashboard
-2. Click the "Generate Insights" button in the AI Insights Engine card
-3. Wait for the AI to analyze your data
-4. View 3 actionable insights about trends, anomalies, and alerts
-
-#### Asking Questions
-
-1. Locate the Natural Language Query chat interface
-2. Type a question about your data (e.g., "Which products have low stock?")
-3. Press Enter or click Send
-4. Receive AI-generated answers based on your actual data
-
-### Alert Configuration
-
-1. Navigate to the Settings page via the sidebar
-2. Click "Create New Alert Rule"
-3. Configure:
-   - **KPI**: Select which metric to monitor
-   - **Condition**: Greater than (>) or Less than (<)
-   - **Threshold**: Numeric value to trigger alert
-   - **Method**: Email or Slack notification
-   - **Destination**: Email address or Slack channel
-4. Click "Add Alert Rule"
-5. Use "Run Check Now" to simulate alert evaluation
-
-## 🏗️ Codebase Structure
-
-```
-AI-Enabled-Business-Dashboard/
-├── app/                          # Next.js App Router
-│   ├── api/                      # API Routes
-│   │   ├── chat/                 # Natural Language Query endpoint
-│   │   │   └── route.ts          # POST handler for chat queries
-│   │   └── insights/             # AI Insights generation endpoint
-│   │       └── route.ts          # POST handler for insights
-│   ├── settings/                 # Settings page
-│   │   └── page.tsx              # Alert configuration interface
-│   ├── globals.css              # Global styles (Tailwind import)
-│   ├── layout.tsx                # Root layout with sidebar
-│   └── page.tsx                  # Main dashboard page
-├── components/                    # React components
-│   ├── dashboard/                # Dashboard-specific components
-│   │   ├── AiInsights.tsx        # AI insights generation UI
-│   │   ├── InventoryTable.tsx    # Inventory list display
-│   │   ├── KpiCards.tsx         # KPI metric cards
-│   │   ├── NlqChat.tsx          # Natural language chat
-│   │   └── SalesChart.tsx       # Sales bar chart
-│   └── ui/                       # Reusable UI components
-│       ├── button.tsx            # Button component
-│       ├── card.tsx              # Card components
-│       ├── input.tsx             # Input field component
-│       └── toast-context.tsx     # Toast notification system
-├── hooks/                        # Custom React hooks
-│   └── use-mobile.ts             # Mobile device detection
-├── lib/                          # Utility libraries
-│   ├── mock-data.ts              # Demo/fallback data
-│   ├── supabase.ts               # Supabase client setup
-│   └── utils.ts                  # Class name utilities
-├── package.json                  # Dependencies and scripts
-├── next.config.ts               # Next.js configuration
-├── tsconfig.json                 # TypeScript configuration
-├── postcss.config.mjs            # PostCSS (Tailwind) config
-├── eslint.config.mjs             # ESLint configuration
-└── tailwind.config.ts            # Tailwind CSS configuration
-```
-
-## 🔧 Technical Details
-
-### Technology Stack
+## Tech Stack
 
 | Category | Technology |
 |----------|------------|
 | Framework | Next.js 15 (App Router) |
 | Language | TypeScript |
-| UI Library | React 19 |
-| Styling | Tailwind CSS v4 |
-| Database | Supabase (optional) |
-| AI | Google Gemini API |
+| UI | React 19, Tailwind CSS v4 |
+| Database/Auth | Supabase (Postgres + RLS + Auth) |
+| Billing | Stripe (Subscriptions + Customer Portal) |
+| AI | Google Gemini |
 | Charts | Recharts |
-| Icons | Lucide React |
-| Animations | Framer Motion |
+| Validation | Zod |
 
-### Architecture
+## Quick Start
 
-#### Server Components
+### Prerequisites
 
-The main dashboard page (`app/page.tsx`) is a Server Component that:
-- Fetches data from Supabase on each request
-- Passes data to Client Components for interactivity
-- Implements SSR for fresh data on every load
+- Node.js 18+
+- npm
+- Supabase project (for auth + multi-tenant data)
+- Stripe account (for billing)
+- Google Gemini API key (for AI features)
 
-#### Client Components
+### Installation
 
-Interactive features use Client Components (`"use client"`):
-- AI Insights generation
-- Natural Language Query chat
-- Alert management (Settings page)
-- Toast notifications
-
-#### API Routes
-
-- `/api/chat`: Processes natural language queries with AI
-- `/api/insights`: Generates actionable business insights
-
-### Database Schema (Supabase)
-
-If using Supabase, create these tables:
-
-```sql
--- Sales data table
-CREATE TABLE sales_data (
-  id SERIAL PRIMARY KEY,
-  month VARCHAR(20) NOT NULL,
-  sales INTEGER NOT NULL,
-  target INTEGER NOT NULL
-);
-
--- Inventory data table
-CREATE TABLE inventory_data (
-  id SERIAL PRIMARY KEY,
-  product VARCHAR(100) NOT NULL,
-  stock INTEGER NOT NULL,
-  status VARCHAR(20) NOT NULL
-);
-
--- KPI metrics table
-CREATE TABLE kpis (
-  id SERIAL PRIMARY KEY,
-  title VARCHAR(100) NOT NULL,
-  value VARCHAR(50) NOT NULL,
-  change VARCHAR(20) NOT NULL,
-  trend VARCHAR(10) NOT NULL
-);
-
--- Alert rules table
-CREATE TABLE alert_rules (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  kpi VARCHAR(100) NOT NULL,
-  condition VARCHAR(5) NOT NULL,
-  threshold INTEGER NOT NULL,
-  method VARCHAR(20) NOT NULL,
-  destination VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
-);
+```bash
+git clone <repository-url>
+cd AI-Enabled-Business-Dashboard
+npm install
 ```
 
-## 🤝 Contribution Guidelines
+### Environment Variables
 
-We welcome contributions! Please follow these guidelines:
+Copy `.env.example` to `.env.local` and fill in:
 
-### Getting Started
+```bash
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # server-only, never expose
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests and linting
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+# Google Gemini
+NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
 
-### Code Style
+# Stripe
+STRIPE_SECRET_KEY=sk_test_xxx
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+STRIPE_PRICE_PRO=price_xxx       # Stripe price ID for Pro plan
+STRIPE_PRICE_ENTERPRISE=price_xxx # Stripe price ID for Enterprise plan
 
-- Use TypeScript for all new code
-- Follow existing code formatting (Prettier/ESLint)
-- Add comments to complex logic
-- Write meaningful commit messages
+# App URL (for Stripe redirects)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
 
-### Testing
+### Database Setup
 
-- Ensure code passes linting: `npm run lint`
-- Test your changes locally before submitting
+Run the migration against your Supabase project:
 
-## 📄 License
+```bash
+# Using Supabase CLI
+supabase db push
 
-This project is private and proprietary. All rights reserved.
+# Or manually: paste supabase/migrations/0001_enterprise.sql
+# into the Supabase SQL Editor and run it.
+```
 
-## 🔐 Environment Variables
+This creates:
+- `organizations`, `organization_members`, `organization_invitations`
+- `audit_logs`, `api_keys`, `usage_events`, `feature_flags`
+- Adds `org_id` columns to existing `sales_data`, `inventory_data`, `kpis`, `alert_rules`
+- Enables Row-Level Security on all tables with org-scoped policies
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | No | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No | Supabase anonymous key |
-| `NEXT_PUBLIC_GEMINI_API_KEY` | No | Google Gemini API key for AI features |
+### Stripe Setup
 
-> **Note**: The application works without any environment variables using mock data. Set these to connect to live data sources.
+1. Create products + prices in Stripe Dashboard for Pro ($49/mo) and Enterprise ($299/mo)
+2. Copy the price IDs into `STRIPE_PRICE_PRO` and `STRIPE_PRICE_ENTERPRISE`
+3. Register a webhook endpoint pointing to `https://yourdomain.com/api/billing/webhook`
+   for events: `checkout.session.completed`, `customer.subscription.updated`,
+   `customer.subscription.deleted`, `invoice.paid`
+4. Copy the webhook signing secret into `STRIPE_WEBHOOK_SECRET`
 
-## 🆘 Support
+For local development, use the Stripe CLI to forward webhooks:
 
-For issues or questions:
-1. Check the existing documentation
-2. Review the inline code comments
-3. Examine the component structure in `/components`
+```bash
+stripe listen --forward-to localhost:3000/api/billing/webhook
+```
+
+### Enable SSO (Optional)
+
+In Supabase Dashboard → Authentication → Providers:
+- Enable Google and/or GitHub
+- Add the OAuth client IDs/secrets from each provider
+- Set the redirect URL to `https://yourdomain.com/auth/v1/callback`
+
+### Run
+
+```bash
+npm run dev
+```
+
+Navigate to [http://localhost:3000](http://localhost:3000)
+
+## Features
+
+### Authentication
+- Email/password signup and login
+- Google and GitHub OAuth SSO
+- Password reset flow
+- Email-based team invitations with token acceptance
+
+### Multi-Tenancy
+- Each user can belong to multiple organizations
+- Org switcher in the header
+- All data is isolated by `org_id` with Postgres RLS enforcement
+- New users create their first org during onboarding
+
+### Role-Based Access Control
+
+| Permission | Owner | Admin | Member | Viewer |
+|------------|-------|-------|--------|--------|
+| View dashboard | ✓ | ✓ | ✓ | ✓ |
+| Use AI features | ✓ | ✓ | ✓ | — |
+| Manage alerts | ✓ | ✓ | ✓ | — |
+| Manage team | ✓ | ✓ | — | — |
+| Manage API keys | ✓ | ✓ | — | — |
+| View audit log | ✓ | ✓ | — | — |
+| Manage billing | ✓ | — | — | — |
+| Manage org | ✓ | — | — | — |
+
+### Billing Plans
+
+| Feature | Free | Pro ($49/mo) | Enterprise ($299/mo) |
+|---------|------|-------------|----------------------|
+| Seats | 1 | 10 | 100 |
+| AI calls/day | 10 | 1,000 | Unlimited |
+| API keys | 0 | 5 | 100 |
+| Audit retention | 7 days | 90 days | 1 year+ |
+| AI Insights | — | ✓ | ✓ |
+| Team management | — | ✓ | ✓ |
+| API access | — | ✓ | ✓ |
+| Audit logs | — | ✓ | ✓ |
+| SSO | — | — | ✓ |
+
+### Dashboard
+- KPI cards with trend indicators
+- Sales vs target charts
+- Inventory status table
+- AI Insights engine (Pro+)
+- Natural language query chat
+- All data scoped to the active organization
+
+### Team Management
+- Invite members by email
+- Assign Admin/Member/Viewer roles
+- Revoke pending invitations
+- Remove members
+- Seat limits enforced per plan
+
+### API Keys
+- Generate keys with `dcai_` prefix
+- Plaintext shown once; stored as SHA-256 hash
+- Revoke keys (retained for audit)
+- Use keys to access the public API at `/api/v1/*`
+
+### Public API
+
+```bash
+# Get org metrics
+curl https://yourdomain.com/api/v1/metrics \
+  -H "Authorization: Bearer dcai_xxx"
+
+# Ask an AI question
+curl -X POST https://yourdomain.com/api/v1/insights \
+  -H "Authorization: Bearer dcai_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Which products have low stock?"}'
+```
+
+### Audit Logging
+Every mutating action is recorded: alert changes, team changes, API key
+creation/revocation, billing changes, org creation/rename. Viewable by
+admins with filtering and pagination.
+
+## Security
+
+This application implements defense-in-depth:
+
+- **Auth cookies**: httpOnly, SameSite=Lax, refreshed via middleware
+- **Row-Level Security**: every tenant-scoped query is enforced by Postgres RLS
+- **CSRF protection**: custom header check on all mutating routes
+- **Rate limiting**: IP-based limits on auth, AI, and public API routes
+- **Input validation**: Zod schemas on every API route
+- **HTML sanitization**: AI output is sanitized before rendering
+- **Security headers**: CSP, HSTS, X-Frame-Options, X-Content-Type-Options,
+  Referrer-Policy, Permissions-Policy
+- **API key hashing**: SHA-256, never stored in plaintext
+- **Secret isolation**: service role key and Stripe secret are server-only
+- **Audit trail**: immutable log of all privileged actions
+
+> **Note**: No application is "100% secure." These measures significantly
+> reduce attack surface, but regular dependency updates (`npm audit`),
+> penetration testing, and monitoring are essential for production.
+
+## Codebase Structure
+
+```
+AI-Enabled-Business-Dashboard/
+├── app/
+│   ├── (auth)/                 # Auth route group (login, signup, etc.)
+│   │   ├── login/
+│   │   ├── signup/
+│   │   ├── forgot-password/
+│   │   ├── reset-password/
+│   │   ├── accept-invite/[token]/
+│   │   └── layout.tsx
+│   ├── (app)/                  # Authenticated app route group
+│   │   ├── dashboard/
+│   │   ├── team/
+│   │   ├── api-keys/
+│   │   ├── audit/
+│   │   ├── billing/
+│   │   ├── settings/
+│   │   └── layout.tsx          # App shell with sidebar + header
+│   ├── (marketing)/            # Public landing page
+│   │   ├── page.tsx
+│   │   └── layout.tsx
+│   ├── onboarding/             # First-org creation
+│   ├── api/
+│   │   ├── chat/               # AI NLQ (auth + rate limited)
+│   │   ├── insights/           # AI insights (auth + rate limited)
+│   │   ├── org/                # Org list + create + switch
+│   │   ├── team/               # Invite, accept, update, revoke
+│   │   ├── api-keys/           # Create + revoke
+│   │   ├── audit/              # Audit log ingestion
+│   │   ├── billing/            # Checkout, portal, webhook
+│   │   └── v1/                 # Public API (API key auth)
+│   │       ├── metrics/
+│   │       └── insights/
+│   ├── layout.tsx              # Root layout (ToastProvider)
+│   └── globals.css
+├── components/
+│   ├── app/                    # Sidebar, org switcher, user menu
+│   ├── auth/                   # AuthForm
+│   ├── dashboard/              # KpiCards, SalesChart, etc.
+│   ├── providers/              # OrgProvider
+│   └── ui/                     # Button, Card, Input, Toast, Markdown
+├── lib/
+│   ├── auth/                   # rbac, roles, requireOrg, apiKeyAuth
+│   ├── billing/                # plans, limits, stripe
+│   ├── security/               # rate-limit, csrf, sanitize
+│   ├── supabase/               # server, client, admin
+│   ├── audit/                  # log
+│   ├── utils/                  # markdown
+│   ├── mock-data.ts
+│   ├── usage.ts
+│   └── utils.ts
+├── supabase/
+│   └── migrations/
+│       └── 0001_enterprise.sql
+├── middleware.ts               # Auth guard + session refresh
+├── next.config.ts              # Security headers
+└── package.json
+```
+
+## Verification
+
+```bash
+npm run lint    # ESLint
+npm run build   # Production build + type check
+```
+
+## License
+
+Private and proprietary. All rights reserved.
 
 ---
 
-Built with ❤️ using Next.js, Tailwind CSS, and Google Gemini AI
+Built with Next.js, Supabase, Stripe, and Google Gemini.

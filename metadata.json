@@ -1,5 +1,5 @@
 {
   "name": "AI-Enabled Business Dashboard",
-  "description": "Internal tool for data visualization and AI-driven insights using Next.js, Supabase, and AI.",
+  "description": "Enterprise multi-tenant SaaS dashboard with AI insights, RBAC, Stripe billing, audit logs, and API keys. Built with Next.js, Supabase, Stripe, and Google Gemini.",
   "requestFramePermissions": []
 }
