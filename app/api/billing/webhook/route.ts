@@ -6,10 +6,12 @@
  * state via the service-role client (no user session exists for webhooks).
  *
  * Handled events:
- *   - checkout.session.completed      -> set customer id + plan
- *   - customer.subscription.updated   -> update plan
+ *   - checkout.session.completed      -> set customer id + subscription
+ *   - customer.subscription.created   -> sync plan/status
+ *   - customer.subscription.updated   -> sync plan/status
  *   - customer.subscription.deleted   -> revert to free
- *   - invoice.paid                    -> no-op (200)
+ *   - invoice.paid                    -> mark active
+ *   - invoice.payment_failed          -> mark past_due
  *
  * @module app/api/billing/webhook/route
  */
@@ -17,27 +19,59 @@ import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { stripe } from '@/lib/billing/stripe';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { PLANS, type PlanId } from '@/lib/billing/plans';
+import { planForPriceId } from '@/lib/billing/prices';
 import { logAudit } from '@/lib/audit/log';
 
 // The webhook reads the raw body via req.text(); this requires the Node.js
 // runtime (the Edge runtime would force streaming/JSON parsing instead).
 export const runtime = 'nodejs';
 
-/**
- * Map a Stripe price id back to one of our PlanId values by comparing
- * against each plan's `stripePriceId`. Falls back to 'pro' when no match
- * is found (a new/unknown paid price should never silently downgrade to
- * free, and 'pro' is the safer default for a paid subscription).
- */
-function planFromPriceId(priceId: string | null | undefined): PlanId {
-  if (!priceId) return 'pro';
-  for (const plan of Object.values(PLANS)) {
-    if (plan.stripePriceId && plan.stripePriceId === priceId) {
-      return plan.id;
-    }
+type SubscriptionState = {
+  stripe_subscription_id: string | null;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+};
+
+function subscriptionState(sub: Stripe.Subscription): SubscriptionState {
+  // `current_period_end` lives on the subscription in the Stripe API version
+  // used by this app; keep the cast local so an SDK type change is contained.
+  const periodEnd = (sub as unknown as { current_period_end?: number }).current_period_end;
+  return {
+    stripe_subscription_id: sub.id,
+    subscription_status: sub.status,
+    current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+    cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+  };
+}
+
+async function orgIdForCustomer(customerId: string | null): Promise<string | null> {
+  if (!customerId) return null;
+  const { data } = await supabaseAdmin
+    .from('organizations')
+    .select('id')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+async function writeBillingAudit(opts: {
+  orgId: string | null;
+  action: string;
+  metadata: Record<string, unknown>;
+}) {
+  if (!opts.orgId) {
+    console.error('billing webhook could not resolve organization', opts.metadata);
+    return;
   }
-  return 'pro';
+  await logAudit({
+    orgId: opts.orgId,
+    userId: null,
+    actorLabel: 'stripe-webhook',
+    action: opts.action,
+    resource: 'billing',
+    metadata: opts.metadata,
+  });
 }
 
 export async function POST(req: Request) {
@@ -45,7 +79,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Billing not configured' }, { status: 501 });
   }
 
-  // Stripe signs the raw body, so we must read it as text (not JSON).
   const body = await req.text();
   const sig = req.headers.get('stripe-signature');
   if (!sig) {
@@ -64,105 +97,152 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Webhook signature failed: ${message}` }, { status: 400 });
   }
 
+  // Idempotency: claim the event before mutating anything. A duplicate event
+  // is acknowledged without applying it twice.
+  const { error: claimError } = await supabaseAdmin
+    .from('stripe_events')
+    .insert({ id: event.id, type: event.type });
+
+  if (claimError) {
+    if (claimError.code === '23505') {
+      return NextResponse.json({ received: true, duplicate: true }, { status: 200 });
+    }
+    console.error('failed to claim stripe event:', claimError);
+    return NextResponse.json({ error: 'Could not record event' }, { status: 500 });
+  }
+
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const orgId = session.client_reference_id;
         const customerId =
-          typeof session.customer === 'string' ? session.customer : session.customer?.id;
-        const subscription =
+          typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null;
+        const subscriptionId =
           typeof session.subscription === 'string'
             ? session.subscription
-            : session.subscription?.id;
+            : session.subscription?.id ?? null;
 
-        // Determine the plan from the subscription's first item price.
-        let planId: PlanId = 'pro';
-        if (subscription) {
-          const sub = await stripe.subscriptions.retrieve(subscription);
-          const priceId = sub.items.data[0]?.price?.id;
-          planId = planFromPriceId(priceId);
+        if (!orgId) {
+          throw new Error('checkout.session.completed missing client_reference_id');
         }
 
-        if (orgId) {
-          await supabaseAdmin
-            .from('organizations')
-            .update({
-              stripe_customer_id: customerId,
-              subscription_plan: planId,
-            })
-            .eq('id', orgId);
-
-          await logAudit({
-            orgId,
-            userId: 'stripe-webhook',
-            action: 'billing.subscription_created',
-            resource: 'billing',
-            metadata: { customerId, planId, subscriptionId: subscription },
-          });
+        let state: SubscriptionState | null = null;
+        let planId: 'pro' | 'enterprise' | null = null;
+        if (subscriptionId) {
+          const sub = await stripe.subscriptions.retrieve(subscriptionId);
+          state = subscriptionState(sub);
+          planId = planForPriceId(sub.items.data[0]?.price?.id) as 'pro' | 'enterprise' | null;
         }
+
+        const updates: Record<string, unknown> = {
+          stripe_customer_id: customerId,
+          updated_at: new Date().toISOString(),
+          ...(state ?? {}),
+        };
+        if (planId) updates.subscription_plan = planId;
+
+        await supabaseAdmin.from('organizations').update(updates).eq('id', orgId);
+
+        await writeBillingAudit({
+          orgId,
+          action: 'billing.subscription_created',
+          metadata: { customerId, planId, subscriptionId },
+        });
         break;
       }
 
+      case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const sub = event.data.object as Stripe.Subscription;
         const customerId =
-          typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+          typeof sub.customer === 'string' ? sub.customer : sub.customer?.id ?? null;
+        const orgId = await orgIdForCustomer(customerId);
+        if (!orgId) throw new Error(`No organization for customer ${customerId ?? 'unknown'}`);
+
         const priceId = sub.items.data[0]?.price?.id;
-        const planId = planFromPriceId(priceId);
+        const planId = planForPriceId(priceId);
+        const updates: Record<string, unknown> = {
+          ...subscriptionState(sub),
+          updated_at: new Date().toISOString(),
+        };
+        // An unknown price must not silently grant a paid plan.
+        if (planId) updates.subscription_plan = planId;
 
-        if (customerId) {
-          await supabaseAdmin
-            .from('organizations')
-            .update({ subscription_plan: planId })
-            .eq('stripe_customer_id', customerId);
+        await supabaseAdmin.from('organizations').update(updates).eq('id', orgId);
 
-          await logAudit({
-            orgId: customerId,
-            userId: 'stripe-webhook',
-            action: 'billing.subscription_updated',
-            resource: 'billing',
-            metadata: { customerId, planId, subscriptionId: sub.id },
-          });
-        }
+        await writeBillingAudit({
+          orgId,
+          action: 'billing.subscription_updated',
+          metadata: { customerId, planId, subscriptionId: sub.id, status: sub.status },
+        });
         break;
       }
 
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription;
         const customerId =
-          typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+          typeof sub.customer === 'string' ? sub.customer : sub.customer?.id ?? null;
+        const orgId = await orgIdForCustomer(customerId);
+        if (!orgId) throw new Error(`No organization for customer ${customerId ?? 'unknown'}`);
 
-        if (customerId) {
-          await supabaseAdmin
-            .from('organizations')
-            .update({ subscription_plan: 'free' })
-            .eq('stripe_customer_id', customerId);
+        await supabaseAdmin
+          .from('organizations')
+          .update({
+            subscription_plan: 'free',
+            subscription_status: 'canceled',
+            stripe_subscription_id: null,
+            current_period_end: null,
+            cancel_at_period_end: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', orgId);
 
-          await logAudit({
-            orgId: customerId,
-            userId: 'stripe-webhook',
-            action: 'billing.subscription_cancelled',
-            resource: 'billing',
-            metadata: { customerId, subscriptionId: sub.id },
-          });
-        }
+        await writeBillingAudit({
+          orgId,
+          action: 'billing.subscription_cancelled',
+          metadata: { customerId, subscriptionId: sub.id },
+        });
         break;
       }
 
       case 'invoice.paid':
-        // No-op for now; future: record invoice history / dunning state.
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId =
+          typeof invoice.customer === 'string'
+            ? invoice.customer
+            : invoice.customer?.id ?? null;
+        const orgId = await orgIdForCustomer(customerId);
+        if (!orgId) throw new Error(`No organization for customer ${customerId ?? 'unknown'}`);
+
+        const paid = event.type === 'invoice.paid';
+        await supabaseAdmin
+          .from('organizations')
+          .update({
+            subscription_status: paid ? 'active' : 'past_due',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', orgId);
+
+        await writeBillingAudit({
+          orgId,
+          action: paid ? 'billing.invoice_paid' : 'billing.payment_failed',
+          metadata: { customerId, invoiceId: invoice.id },
+        });
         break;
+      }
 
       default:
         // Unhandled event types are acknowledged so Stripe doesn't retry.
         break;
     }
-  } catch (err) {
-    // Log but still 200 so Stripe doesn't endlessly retry a poison event.
-    // Surface failures to server logs for investigation.
-    console.error('billing webhook handler failed:', err);
-  }
 
-  return NextResponse.json({ received: true }, { status: 200 });
+    return NextResponse.json({ received: true }, { status: 200 });
+  } catch (err) {
+    // Release the idempotency claim so Stripe's retry can process the event.
+    await supabaseAdmin.from('stripe_events').delete().eq('id', event.id);
+    console.error('billing webhook handler failed:', err);
+    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
+  }
 }

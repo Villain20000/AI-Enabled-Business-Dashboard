@@ -26,6 +26,7 @@ export interface AuditLogRow {
   metadata: Record<string, unknown> | null;
   createdAt: string;
   userEmail: string;
+  actorLabel: string | null;
 }
 
 interface AuditViewProps {
@@ -152,7 +153,9 @@ export function AuditView({ logs, actions, page, totalPages }: AuditViewProps) {
                         {formatTime(row.createdAt)}
                       </td>
                       <td className="px-4 py-3 text-slate-900">
-                        {row.userEmail}
+                        {row.userEmail !== '—'
+                          ? row.userEmail
+                          : row.actorLabel ?? '—'}
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">

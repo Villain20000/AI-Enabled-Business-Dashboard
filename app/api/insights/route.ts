@@ -20,6 +20,7 @@ import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireOrgApi } from '@/lib/auth/requireOrg';
+import { supabaseServer } from '@/lib/supabase/server';
 import { checkFeature, checkAiCallLimit } from '@/lib/billing/limits';
 import { recordUsage } from '@/lib/usage';
 import { rateLimit, getClientIp } from '@/lib/security/rate-limit';
@@ -28,7 +29,9 @@ import { stripDangerousHtml } from '@/lib/security/sanitize';
 
 /** Zod schema validating the insights request body. */
 const InsightsSchema = z.object({
-  data: z.unknown(),
+  // Accepted for backwards compatibility but ignored; context is fetched from
+  // the authenticated organization server-side.
+  data: z.unknown().optional(),
 });
 
 /** Shape of a single insight returned to the client. */
@@ -90,12 +93,21 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
-  const { data } = parsed;
+  // 7. Fetch org-scoped data server-side (RLS enforced).
+  const supabase = await supabaseServer();
+  const [{ data: sales }, { data: inventory }, { data: kpis }] = await Promise.all([
+    supabase.from('sales_data').select('*').eq('org_id', auth.ctx.orgId),
+    supabase.from('inventory_data').select('*').eq('org_id', auth.ctx.orgId),
+    supabase.from('kpis').select('*').eq('org_id', auth.ctx.orgId),
+  ]);
+  const data = { sales: sales ?? [], inventory: inventory ?? [], kpis: kpis ?? [] };
 
-  // 7. Build prompt + call Gemini
-  const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
+  // 8. Build prompt + call Gemini
+  const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY,
+  });
   const prompt = `
-    You are an AI Business Intelligence Analyst for a pharmaceutical company.
+    You are an AI Business Intelligence Analyst.
     Analyze the following dashboard data and provide 3 key actionable insights.
     Focus on anomalies, trends, or critical alerts (e.g., low inventory).
     Respond as a JSON array of objects, each with "title" and "description" string fields.

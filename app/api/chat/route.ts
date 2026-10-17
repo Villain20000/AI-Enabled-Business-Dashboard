@@ -19,6 +19,7 @@ import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireOrgApi } from '@/lib/auth/requireOrg';
+import { supabaseServer } from '@/lib/supabase/server';
 import { checkFeature, checkAiCallLimit } from '@/lib/billing/limits';
 import { recordUsage } from '@/lib/usage';
 import { rateLimit, getClientIp } from '@/lib/security/rate-limit';
@@ -28,7 +29,10 @@ import { stripDangerousHtml } from '@/lib/security/sanitize';
 /** Zod schema validating the chat request body. */
 const ChatSchema = z.object({
   message: z.string().min(1).max(2000),
-  contextData: z.unknown(),
+  conversationId: z.string().uuid().optional(),
+  // Accepted for backwards compatibility but deliberately ignored: the server
+  // fetches the org's own rows so a caller cannot forge another tenant's data.
+  contextData: z.unknown().optional(),
 });
 
 /**
@@ -85,14 +89,61 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
-  const { message, contextData } = parsed;
+  const { message } = parsed;
 
-  // 7. Build prompt + call Gemini
-  const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
+  // 7. Resolve or create a persisted conversation. RLS ensures the caller can
+  // only read/write their own conversations within this org.
+  const supabase = await supabaseServer();
+  let conversationId = parsed.conversationId;
+  if (conversationId) {
+    const { data: existing } = await supabase
+      .from('ai_conversations')
+      .select('id')
+      .eq('id', conversationId)
+      .eq('org_id', auth.ctx.orgId)
+      .maybeSingle();
+    if (!existing) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+    }
+  } else {
+    const { data: created, error: createError } = await supabase
+      .from('ai_conversations')
+      .insert({
+        org_id: auth.ctx.orgId,
+        user_id: auth.ctx.userId,
+        title: message.slice(0, 80),
+      })
+      .select('id')
+      .single();
+    if (createError || !created) {
+      return NextResponse.json({ error: 'Could not start a conversation' }, { status: 500 });
+    }
+    conversationId = created.id as string;
+  }
+
+  await supabase.from('ai_messages').insert({
+    conversation_id: conversationId,
+    role: 'user',
+    content: message,
+  });
+
+  // 8. Fetch the current org's data server-side. RLS scopes these queries; the
+  // client no longer supplies context that could be forged.
+  const [{ data: sales }, { data: inventory }, { data: kpis }] = await Promise.all([
+    supabase.from('sales_data').select('*').eq('org_id', auth.ctx.orgId),
+    supabase.from('inventory_data').select('*').eq('org_id', auth.ctx.orgId),
+    supabase.from('kpis').select('*').eq('org_id', auth.ctx.orgId),
+  ]);
+  const contextData = { sales: sales ?? [], inventory: inventory ?? [], kpis: kpis ?? [] };
+
+  // 9. Build prompt + call Gemini
+  const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY,
+  });
   const prompt = `
-    You are an AI Business Intelligence Assistant for a pharmaceutical company (like Pfizer).
-    The user is asking a question about their data.
-    Here is the current data context (mocked database state):
+    You are an AI Business Intelligence Assistant for a business intelligence dashboard.
+    The user is asking a question about their organization's data.
+    Here is the current data context:
     ${JSON.stringify(contextData)}
 
     User Question: "${message}"
@@ -114,9 +165,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to generate response' }, { status: 500 });
   }
 
-  // 8. Meter usage
+  const safeText = stripDangerousHtml(text);
+
+  // 10. Persist the assistant reply and meter usage.
+  await supabase.from('ai_messages').insert({
+    conversation_id: conversationId,
+    role: 'assistant',
+    content: safeText,
+  });
+  await supabase
+    .from('ai_conversations')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', conversationId);
   await recordUsage(auth.ctx.orgId, 'ai_call');
 
-  // 9. Sanitize AI output before returning
-  return NextResponse.json({ text: stripDangerousHtml(text) });
+  // 11. Return the sanitized output plus the conversation id for follow-ups.
+  return NextResponse.json({ text: safeText, conversationId });
 }

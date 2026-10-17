@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast-context';
 import { PLAN_LIST, PLANS, type Plan, type PlanId } from '@/lib/billing/plans';
+import { apiFetch } from '@/lib/api/client';
 
 interface BillingViewProps {
   orgId: string;
@@ -37,6 +38,12 @@ interface BillingViewProps {
   stripeCustomerId: string | null;
   stripeEnabled: boolean;
   status: 'success' | 'cancelled' | null;
+  /** Price IDs are resolved on the server and passed down; they are not
+   *  secret, but reading process.env in a client bundle returns undefined. */
+  priceIds: Partial<Record<PlanId, string>>;
+  subscriptionStatus: string;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
 }
 
 // Tier ordering used to label buttons as Upgrade vs Downgrade.
@@ -65,6 +72,10 @@ export default function BillingView({
   stripeCustomerId,
   stripeEnabled,
   status,
+  priceIds,
+  subscriptionStatus,
+  currentPeriodEnd,
+  cancelAtPeriodEnd,
 }: BillingViewProps) {
   const { addToast } = useToast();
   const currentPlan = PLANS[currentPlanId];
@@ -84,13 +95,21 @@ export default function BillingView({
    * the hosted URL returned by the route handler.
    */
   async function handleCheckout(plan: Plan) {
-    if (!plan.stripePriceId) return; // Enterprise / contact-sales path.
+    const priceId = priceIds[plan.id];
+    if (!priceId) return; // Enterprise / contact-sales path.
+
+    // Existing customers change plans through Stripe's portal. This avoids
+    // creating a second subscription and duplicate customer records.
+    if (stripeCustomerId) {
+      await handlePortal();
+      return;
+    }
+
     setLoadingPlan(plan.id);
     try {
-      const res = await fetch('/api/billing/checkout', {
+      const res = await apiFetch('/api/billing/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceId: plan.stripePriceId }),
+        json: { priceId },
       });
       const data = await res.json();
       if (!res.ok || !data.url) {
@@ -112,7 +131,7 @@ export default function BillingView({
   async function handlePortal() {
     setLoadingPlan('portal');
     try {
-      const res = await fetch('/api/billing/portal', { method: 'POST' });
+      const res = await apiFetch('/api/billing/portal', { method: 'POST' });
       const data = await res.json();
       if (!res.ok || !data.url) {
         throw new Error(data.error || 'Failed to open billing portal');
@@ -152,6 +171,12 @@ export default function BillingView({
       {status === 'cancelled' && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Checkout was cancelled.
+        </div>
+      )}
+
+      {subscriptionStatus === 'past_due' && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          Payment failed. Update your payment method to keep this organization on its current plan.
         </div>
       )}
 
@@ -210,6 +235,19 @@ export default function BillingView({
             </div>
           </dl>
 
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+            <span>
+              Status:{' '}
+              <span className="font-medium capitalize text-slate-900">{subscriptionStatus}</span>
+            </span>
+            {currentPeriodEnd && (
+              <span>
+                {cancelAtPeriodEnd ? 'Ends' : 'Renews'} on{' '}
+                {new Date(currentPeriodEnd).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+
           {/* Portal management link */}
           {stripeCustomerId && (
             <div className="mt-6">
@@ -240,7 +278,7 @@ export default function BillingView({
             const isUpgrade = planIndex > currentIndex;
             const isDowngrade = planIndex < currentIndex;
             const isLoading = loadingPlan === plan.id;
-            const hasPrice = Boolean(plan.stripePriceId);
+            const hasPrice = Boolean(priceIds[plan.id]);
 
             // Button label + variant by relationship to the current plan.
             let label = 'Current plan';
@@ -309,12 +347,24 @@ export default function BillingView({
                   </ul>
 
                   {/* Action button */}
-                  {hasPrice ? (
+                  {hasPrice || plan.id === 'free' ? (
                     <Button
                       variant={variant}
                       className="w-full"
-                      disabled={isCurrent || isLoading || demoMode}
-                      onClick={() => handleCheckout(plan)}
+                      disabled={isCurrent || isLoading || (demoMode && plan.id !== 'free')}
+                      onClick={() => {
+                        if (plan.id === 'free') {
+                          if (stripeCustomerId) void handlePortal();
+                          else
+                            addToast({
+                              title: 'Already on Free',
+                              description: 'There is no lower plan to downgrade to.',
+                              type: 'info',
+                            });
+                          return;
+                        }
+                        void handleCheckout(plan);
+                      }}
                     >
                       {isLoading && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />

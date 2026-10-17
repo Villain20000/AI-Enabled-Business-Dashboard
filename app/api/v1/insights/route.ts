@@ -134,7 +134,9 @@ export async function POST(req: Request) {
     `;
 
     // 9. Call Gemini (fresh client per request; key is a public env var).
-    const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY,
+    });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,

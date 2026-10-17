@@ -10,9 +10,10 @@
 'use client';
 
 import { useState } from 'react';
-import { LogOut, ChevronDown } from 'lucide-react';
+import { LogOut, ChevronDown, DoorOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { apiFetch } from '@/lib/api/client';
 import type { OrgRole } from '@/lib/auth/rbac';
 
 /** Derive up to two uppercase initials from an email address. */
@@ -30,6 +31,14 @@ export function UserMenu({ userEmail, role }: { userEmail: string; role: OrgRole
   async function handleSignOut() {
     await supabaseBrowser.auth.signOut();
     window.location.href = '/login';
+  }
+
+  async function handleLeaveOrg() {
+    if (!confirm('Leave this organization? You will lose access until invited again.')) return;
+    const res = await apiFetch('/api/org/leave', { method: 'POST' });
+    if (res.ok) {
+      window.location.href = '/select-org';
+    }
   }
 
   return (
@@ -60,6 +69,16 @@ export function UserMenu({ userEmail, role }: { userEmail: string; role: OrgRole
               <p className="truncate text-sm font-medium text-slate-700">{userEmail}</p>
               <p className="text-xs capitalize text-slate-400">{role}</p>
             </div>
+            {role !== 'owner' && (
+              <button
+                type="button"
+                onClick={handleLeaveOrg}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <DoorOpen className="h-4 w-4" />
+                Leave organization
+              </button>
+            )}
             <button
               type="button"
               onClick={handleSignOut}

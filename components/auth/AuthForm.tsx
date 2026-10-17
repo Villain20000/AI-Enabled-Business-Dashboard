@@ -29,12 +29,16 @@ type AuthMode = 'login' | 'signup';
 interface AuthFormProps {
   /** Whether the form signs users in (login) or creates accounts (signup). */
   mode: AuthMode;
+  /** Same-origin path to return to after successful authentication. */
+  redirectTo?: string;
+  /** Error message produced by an auth callback redirect. */
+  initialError?: string;
 }
 
 /** Basic email format check. */
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function AuthForm({ mode }: AuthFormProps) {
+export default function AuthForm({ mode, redirectTo = '/dashboard', initialError }: AuthFormProps) {
   const { addToast } = useToast();
   const isSignup = mode === 'signup';
 
@@ -44,7 +48,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
 
   /**
    * Validate fields before submission. Returns an error message string or
@@ -72,20 +77,34 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setLoading(true);
     try {
       if (isSignup) {
-        const { error: signUpError } = await supabaseBrowser.auth.signUp({ email, password });
-        if (signUpError) throw signUpError;
-        addToast({
-          title: 'Account created',
-          description: 'Check your inbox to confirm your email, then sign in.',
-          type: 'success',
+        const { data, error: signUpError } = await supabaseBrowser.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+          },
         });
+        if (signUpError) throw signUpError;
+
+        // With email confirmation enabled Supabase returns no session. Do not
+        // send the user to /dashboard in that case; show a confirmation state.
+        if (!data.session) {
+          setAwaitingConfirmation(true);
+          addToast({
+            title: 'Check your email',
+            description: 'Confirm your address, then return here to continue.',
+            type: 'success',
+          });
+          return;
+        }
+        addToast({ title: 'Account created', description: 'Welcome to DataCore AI.', type: 'success' });
       } else {
         const { error: signInError } = await supabaseBrowser.auth.signInWithPassword({ email, password });
         if (signInError) throw signInError;
         addToast({ title: 'Signed in', description: 'Welcome back to DataCore AI.', type: 'success' });
       }
-      // Hard redirect to dashboard after successful auth.
-      window.location.href = '/dashboard';
+      // Only redirect after a session actually exists.
+      window.location.href = redirectTo;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
       setError(message);
@@ -102,7 +121,9 @@ export default function AuthForm({ mode }: AuthFormProps) {
     try {
       const { error: oauthError } = await supabaseBrowser.auth.signInWithOAuth({
         provider,
-        options: { redirectTo: `${window.location.origin}/dashboard` },
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+        },
       });
       if (oauthError) throw oauthError;
       // Browser will redirect to the provider; nothing else to do here.
@@ -115,6 +136,32 @@ export default function AuthForm({ mode }: AuthFormProps) {
   }
 
   const busy = loading || oauthLoading !== null;
+
+  if (awaitingConfirmation) {
+    return (
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="text-2xl">Confirm your email</CardTitle>
+          <CardDescription>
+            We sent a confirmation link to <span className="font-medium text-slate-900">{email}</span>.
+            Open it to finish creating your account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-slate-600">
+            After confirming, sign in to continue. If the link expired, request a
+            new one from the sign-in page.
+          </p>
+          <Link
+            href={`/login?redirect=${encodeURIComponent(redirectTo)}`}
+            className="inline-flex h-9 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Back to sign in
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full">

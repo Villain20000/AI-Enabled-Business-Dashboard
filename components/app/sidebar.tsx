@@ -18,6 +18,7 @@ import {
   ScrollText,
   CreditCard,
   Settings,
+  Database,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { OrgRole } from '@/lib/auth/roles';
@@ -33,6 +34,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, minRole: 'viewer' },
+  { label: 'Data', href: '/data', icon: Database, minRole: 'viewer' },
   { label: 'Team', href: '/team', icon: Users, minRole: 'admin' },
   { label: 'API Keys', href: '/api-keys', icon: KeyRound, minRole: 'admin' },
   { label: 'Audit Log', href: '/audit', icon: ScrollText, minRole: 'admin' },

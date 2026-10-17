@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast-context';
 import { supabaseBrowser } from '@/lib/supabase/client';
+import { apiFetch } from '@/lib/api/client';
 import { can, type OrgRole } from '@/lib/auth/roles';
 import { kpis } from '@/lib/mock-data';
 
@@ -59,6 +60,24 @@ interface AlertRule {
   method: AlertMethod;
   destination: string;
   org_id?: string;
+}
+
+interface AlertEvent {
+  id: string;
+  status: string;
+  channel: string;
+  destination: string;
+  triggered_value: number | null;
+  error: string | null;
+  created_at: string;
+  delivered_at: string | null;
+  alert_rules?: { kpi?: string } | { kpi?: string }[] | null;
+}
+
+function eventKpi(event: AlertEvent): string {
+  const relation = event.alert_rules;
+  if (Array.isArray(relation)) return relation[0]?.kpi ?? 'Alert';
+  return relation?.kpi ?? 'Alert';
 }
 
 const CONDITIONS = ['>', '<', '>=', '<=', '=='] as const;
@@ -197,7 +216,9 @@ function AlertsTab({ orgId, role, addToast }: AlertsTabProps) {
   const canManage = can(role, 'alerts:manage');
 
   const [rules, setRules] = useState<AlertRule[]>([]);
+  const [events, setEvents] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [eventsLoading, setEventsLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [running, setRunning] = useState(false);
 
@@ -227,11 +248,22 @@ function AlertsTab({ orgId, role, addToast }: AlertsTabProps) {
     setLoading(false);
   }, [orgId, addToast]);
 
+  const loadEvents = useCallback(async () => {
+    setEventsLoading(true);
+    try {
+      const res = await apiFetch('/api/alerts/events');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setEvents((data.events ?? []) as AlertEvent[]);
+    } finally {
+      setEventsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        await loadRules();
+        await Promise.all([loadRules(), loadEvents()]);
       } finally {
         if (active) setLoading(false);
       }
@@ -250,6 +282,22 @@ function AlertsTab({ orgId, role, addToast }: AlertsTabProps) {
       addToast({
         title: 'Missing fields',
         description: 'KPI, threshold, and destination are required.',
+        type: 'error',
+      });
+      return;
+    }
+    if (method === 'slack' && !/^https:\/\/hooks\.slack\.com\//.test(destination)) {
+      addToast({
+        title: 'Invalid Slack destination',
+        description: 'Use a Slack incoming webhook URL starting with https://hooks.slack.com/.',
+        type: 'error',
+      });
+      return;
+    }
+    if (method === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination)) {
+      addToast({
+        title: 'Invalid email destination',
+        description: 'Enter a valid email address.',
         type: 'error',
       });
       return;
@@ -317,11 +365,6 @@ function AlertsTab({ orgId, role, addToast }: AlertsTabProps) {
   }
 
   async function handleRunCheck() {
-    setRunning(true);
-    // Simulate an alert evaluation pass over the active rules.
-    await new Promise((r) => setTimeout(r, 800));
-    setRunning(false);
-
     if (rules.length === 0) {
       addToast({
         title: 'No alerts to check',
@@ -331,12 +374,27 @@ function AlertsTab({ orgId, role, addToast }: AlertsTabProps) {
       return;
     }
 
-    const triggered = rules[0];
-    addToast({
-      title: 'Check complete',
-      description: `Evaluated ${rules.length} rule(s). Latest: ${triggered.kpi} ${triggered.condition} ${triggered.threshold}.`,
-      type: 'success',
-    });
+    setRunning(true);
+    try {
+      const res = await apiFetch('/api/alerts/run', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Alert check failed.');
+
+      addToast({
+        title: 'Check complete',
+        description: `Evaluated ${data.evaluated ?? 0} rule(s); ${data.triggered ?? 0} triggered, ${data.delivered ?? 0} delivered.`,
+        type: 'success',
+      });
+      await loadEvents();
+    } catch (err) {
+      addToast({
+        title: 'Alert check failed',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        type: 'error',
+      });
+    } finally {
+      setRunning(false);
+    }
   }
 
   return (
@@ -411,7 +469,7 @@ function AlertsTab({ orgId, role, addToast }: AlertsTabProps) {
                     placeholder={
                       method === 'email'
                         ? 'you@company.com'
-                        : '#channel or webhook'
+                        : 'https://hooks.slack.com/services/...'
                     }
                   />
                 </Field>
@@ -505,6 +563,63 @@ function AlertsTab({ orgId, role, addToast }: AlertsTabProps) {
                 </li>
               ))}
             </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Alert history</CardTitle>
+          <CardDescription>Recent threshold checks and delivery attempts.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {eventsLoading ? (
+            <div className="flex items-center text-sm text-slate-500">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading alert history...
+            </div>
+          ) : events.length === 0 ? (
+            <p className="text-sm text-slate-500">No alert events yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="pb-2 pr-4 font-medium">Time</th>
+                    <th className="pb-2 pr-4 font-medium">KPI</th>
+                    <th className="pb-2 pr-4 font-medium">Value</th>
+                    <th className="pb-2 pr-4 font-medium">Channel</th>
+                    <th className="pb-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {events.map((event) => (
+                    <tr key={event.id}>
+                      <td className="py-3 pr-4 text-slate-500">
+                        {new Date(event.created_at).toLocaleString()}
+                      </td>
+                      <td className="py-3 pr-4 text-slate-900">{eventKpi(event)}</td>
+                      <td className="py-3 pr-4 text-slate-600">{event.triggered_value ?? '—'}</td>
+                      <td className="py-3 pr-4 capitalize text-slate-600">{event.channel}</td>
+                      <td className="py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                            event.status === 'delivered'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : event.status === 'failed'
+                                ? 'bg-rose-50 text-rose-700'
+                                : 'bg-slate-100 text-slate-600'
+                          }`}
+                          title={event.error ?? undefined}
+                        >
+                          {event.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -700,27 +815,28 @@ function OrganizationTab({
     }
 
     setSaving(true);
-    const { error } = await supabaseBrowser
-      .from('organizations')
-      .update({ name: name.trim() })
-      .eq('id', orgId);
-    setSaving(false);
+    try {
+      const res = await apiFetch('/api/org', {
+        method: 'PATCH',
+        json: { name: name.trim() },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Rename failed.');
 
-    if (error) {
+      addToast({
+        title: 'Organization renamed',
+        description: `Now known as "${name.trim()}".`,
+        type: 'success',
+      });
+    } catch (err) {
       addToast({
         title: 'Rename failed',
-        description: error.message,
+        description: err instanceof Error ? err.message : 'Please try again.',
         type: 'error',
       });
-      return;
+    } finally {
+      setSaving(false);
     }
-
-    recordAudit('org.rename', 'organizations', { name: name.trim() });
-    addToast({
-      title: 'Organization renamed',
-      description: `Now known as "${name.trim()}".`,
-      type: 'success',
-    });
   }
 
   if (!canManage) {

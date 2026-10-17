@@ -8,6 +8,7 @@
  * @module app/(app)/audit/page
  */
 import { requireOrg } from '@/lib/auth/requireOrg';
+import { getOrgPlan } from '@/lib/billing/limits';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { AuditView } from './AuditView';
@@ -24,6 +25,24 @@ export default async function AuditLogPage({
   // Membership guard — requires audit:view permission.
   const ctx = await requireOrg('audit:view');
 
+  const { features } = await getOrgPlan(ctx.orgId);
+  if (!features.audit_log) {
+    return (
+      <div className="mx-auto max-w-3xl rounded-xl border border-blue-200 bg-blue-50 p-6">
+        <h1 className="text-lg font-semibold text-slate-900">Audit logging is a Pro feature</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Upgrade to retain and review organization audit history.
+        </p>
+        <a
+          href="/billing"
+          className="mt-4 inline-flex h-9 items-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          View plans
+        </a>
+      </div>
+    );
+  }
+
   // Next.js 15: searchParams is a Promise and must be awaited.
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
@@ -34,7 +53,7 @@ export default async function AuditLogPage({
   // Base query for the current page of logs.
   let query = supabase
     .from('audit_logs')
-    .select('id, user_id, action, resource, metadata, created_at', {
+    .select('id, user_id, actor_label, action, resource, metadata, created_at', {
       count: 'exact',
     })
     .eq('org_id', ctx.orgId)
@@ -77,6 +96,7 @@ export default async function AuditLogPage({
     metadata: r.metadata as Record<string, unknown> | null,
     createdAt: r.created_at as string,
     userEmail: (r.user_id && emailMap.get(r.user_id as string)) ?? '—',
+    actorLabel: (r.actor_label as string | null) ?? null,
   }));
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));

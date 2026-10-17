@@ -18,6 +18,8 @@ import { useState } from "react"
 // Import UI components
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useToast } from "@/components/ui/toast-context"
+import { apiFetch } from "@/lib/api/client"
 
 // Import icons from lucide-react
 import { Sparkles, Loader2 } from "lucide-react"
@@ -47,6 +49,8 @@ interface Insight {
  * @returns {JSX.Element} AI insights generation interface
  */
 export function AiInsights({ salesData, inventoryData, kpis }: { salesData: any[], inventoryData: any[], kpis: any[] }) {
+  const { addToast } = useToast()
+
   // State for storing generated insights
   const [insights, setInsights] = useState<Insight[]>([])
   
@@ -63,20 +67,26 @@ export function AiInsights({ salesData, inventoryData, kpis }: { salesData: any[
     setLoading(true)
     try {
       // Call the insights API endpoint
-      const response = await fetch('/api/insights', {
+      const response = await apiFetch('/api/insights', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         // Send all dashboard data for analysis
-        body: JSON.stringify({ data: { salesData, inventoryData, kpis } })
+        json: { data: { salesData, inventoryData, kpis } },
       })
-      
+
       // Parse response and update state
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.error ?? 'Unable to generate insights.')
+      }
       if (data.insights) {
         setInsights(data.insights)
       }
     } catch (error) {
-      console.error("Failed to generate insights", error)
+      addToast({
+        title: 'Insights unavailable',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        type: 'error',
+      })
     } finally {
       setLoading(false)
     }

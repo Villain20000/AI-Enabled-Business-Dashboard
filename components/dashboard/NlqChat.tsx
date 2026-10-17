@@ -18,6 +18,9 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Markdown } from "@/components/ui/markdown"
+import { useToast } from "@/components/ui/toast-context"
+import { apiFetch } from "@/lib/api/client"
 
 // Import icons from lucide-react
 import { MessageSquare, Send, Bot, User } from "lucide-react"
@@ -49,6 +52,8 @@ interface Message {
  * @returns {JSX.Element} Chat interface component
  */
 export function NlqChat({ salesData, inventoryData, kpis }: { salesData: any[], inventoryData: any[], kpis: any[] }) {
+  const { addToast } = useToast()
+
   // State for chat messages
   const [messages, setMessages] = useState<Message[]>([
     // Initial welcome message from AI assistant
@@ -57,6 +62,9 @@ export function NlqChat({ salesData, inventoryData, kpis }: { salesData: any[], 
   
   // State for input field value
   const [input, setInput] = useState('')
+
+  // Persisted conversation id returned by the server.
+  const [conversationId, setConversationId] = useState<string | undefined>()
   
   // State for loading indicator during API calls
   const [loading, setLoading] = useState(false)
@@ -83,25 +91,30 @@ export function NlqChat({ salesData, inventoryData, kpis }: { salesData: any[], 
 
     try {
       // Call the chat API endpoint
-      const response = await fetch('/api/chat', {
+      const response = await apiFetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        json: {
           message: userMsg,
+          conversationId,
           // Include dashboard data as context for AI
-          contextData: { salesData, inventoryData, kpis }
-        })
+          contextData: { salesData, inventoryData, kpis },
+        },
       })
-      
-      const data = await response.json()
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.error ?? 'Unable to process your question.')
+      }
+      if (data.conversationId) setConversationId(data.conversationId)
       if (data.text) {
         // Add AI response to messages
         setMessages(prev => [...prev, { role: 'ai', content: data.text }])
       }
     } catch (error) {
-      console.error("Chat error", error)
+      const message = error instanceof Error ? error.message : 'Something went wrong.'
+      addToast({ title: 'Chat unavailable', description: message, type: 'error' })
       // Show error message in chat
-      setMessages(prev => [...prev, { role: 'ai', content: 'Sorry, I encountered an error processing your request.' }])
+      setMessages(prev => [...prev, { role: 'ai', content: `Sorry, I could not answer that: ${message}` }])
     } finally {
       setLoading(false)
     }
@@ -131,7 +144,7 @@ export function NlqChat({ salesData, inventoryData, kpis }: { salesData: any[], 
                 </div>
                 {/* Message Bubble */}
                 <div className={`rounded-lg px-3 py-2 text-sm ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'}`}>
-                  {msg.content}
+                  {msg.role === 'ai' ? <Markdown content={msg.content} /> : msg.content}
                 </div>
               </div>
             </div>

@@ -64,7 +64,8 @@ NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # server-only, never expose
 
-# Google Gemini
+# Google Gemini (server-only; NEXT_PUBLIC_ is kept for backwards compatibility)
+GEMINI_API_KEY=your_gemini_api_key
 NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
 
 # Stripe
@@ -76,6 +77,12 @@ STRIPE_PRICE_ENTERPRISE=price_xxx # Stripe price ID for Enterprise plan
 
 # App URL (for Stripe redirects)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Background alert evaluation
+CRON_SECRET=replace-with-a-long-random-secret
+
+# Optional email relay for alert notifications (POST JSON {to,subject,text,...})
+ALERT_EMAIL_WEBHOOK_URL=
 ```
 
 ### Database Setup
@@ -86,15 +93,36 @@ Run the migration against your Supabase project:
 # Using Supabase CLI
 supabase db push
 
-# Or manually: paste supabase/migrations/0001_enterprise.sql
-# into the Supabase SQL Editor and run it.
+# Or manually: run the migrations in order in the Supabase SQL Editor:
+#   supabase/migrations/0000_base.sql
+#   supabase/migrations/0001_enterprise.sql
+#   supabase/migrations/0002_security_and_features.sql
 ```
 
 This creates:
+- base tables for sales, inventory, KPIs, and alert rules
 - `organizations`, `organization_members`, `organization_invitations`
 - `audit_logs`, `api_keys`, `usage_events`, `feature_flags`
+- `data_sources`, `import_jobs`, `alert_events`, `ai_conversations`, `ai_messages`, `stripe_events`
 - Adds `org_id` columns to existing `sales_data`, `inventory_data`, `kpis`, `alert_rules`
 - Enables Row-Level Security on all tables with org-scoped policies
+
+`0002_security_and_features.sql` hardens the 0001 policies: organization
+renames are owner-only, API keys and audit logs require owner/admin, viewers
+are read-only, and AI conversations are visible only to their author.
+
+#### Verifying the database layer
+
+`supabase/tests/rls.sql` seeds two tenants and asserts tenant isolation and role
+boundaries as the `authenticated` role. It runs in a transaction that is rolled
+back, so it is safe to run against any database that has the migrations applied:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rls.sql
+```
+
+CI runs the migrations on a clean Supabase Postgres image and then runs this
+suite, so a broken migration or a missing policy fails the build.
 
 ### Stripe Setup
 
@@ -173,7 +201,24 @@ Navigate to [http://localhost:3000](http://localhost:3000)
 - Inventory status table
 - AI Insights engine (Pro+)
 - Natural language query chat
+- Explicit empty states instead of cross-tenant mock fallbacks
 - All data scoped to the active organization
+
+### Data Management
+- CSV import for sales, inventory, and KPIs
+- Row-level validation with all-or-nothing imports
+- CSV templates and exports
+- Import history
+- Explicit "load sample data" action for new organizations
+
+### Alerts
+- Per-org threshold rules for revenue, inventory alerts, active users, or named KPIs
+- Manual "Run Check Now" evaluation
+- Cooldown-based deduplication
+- Slack incoming-webhook delivery
+- Email delivery through an operator-configured relay
+- Alert event history with delivery status
+- Secret-protected cron endpoint at `/api/cron/alerts`
 
 ### Team Management
 - Invite members by email
@@ -291,8 +336,10 @@ AI-Enabled-Business-Dashboard/
 ## Verification
 
 ```bash
-npm run lint    # ESLint
-npm run build   # Production build + type check
+npm run lint       # ESLint
+npm run typecheck  # TypeScript
+npm test           # Vitest unit tests
+npm run build      # Production build
 ```
 
 ## License

@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
+import { checkCsrf } from '@/lib/security/csrf';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logAudit } from '@/lib/audit/log';
@@ -20,6 +21,9 @@ import { logAudit } from '@/lib/audit/log';
 const Body = z.object({ token: z.string().min(1) });
 
 export async function POST(req: Request) {
+  const csrfError = checkCsrf(req);
+  if (csrfError) return csrfError;
+
   // The caller must be an authenticated user (the invitee).
   const supabase = await supabaseServer();
   const {
@@ -58,16 +62,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'This invitation has expired.' }, { status: 404 });
   }
 
-  // Insert the membership with the service-role client (bypasses RLS so an
-  // admin can add another user). Idempotent: if already a member, update role.
-  const { error: memberError } = await supabaseAdmin
-    .from('organization_members')
-    .upsert(
-      { org_id: invite.org_id, user_id: user.id, role: invite.role },
-      { onConflict: 'org_id,user_id' },
+  // Critical authorization check: the signed-in user must be the invitee.
+  // A leaked token must not let an arbitrary account join the organization.
+  if ((user.email ?? '').toLowerCase() !== invite.email.toLowerCase()) {
+    return NextResponse.json(
+      { error: 'This invitation was sent to a different email address.' },
+      { status: 403 },
     );
-  if (memberError) {
-    return NextResponse.json({ error: 'Failed to add you to the organization.' }, { status: 500 });
+  }
+
+  // If the user is already a member, do not overwrite their current role
+  // (an old invite must not be able to demote an admin).
+  const { data: existingMember } = await supabaseAdmin
+    .from('organization_members')
+    .select('role')
+    .eq('org_id', invite.org_id)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (!existingMember) {
+    const { error: memberError } = await supabaseAdmin
+      .from('organization_members')
+      .insert({ org_id: invite.org_id, user_id: user.id, role: invite.role });
+    if (memberError) {
+      return NextResponse.json({ error: 'Failed to add you to the organization.' }, { status: 500 });
+    }
   }
 
   // Mark the invitation accepted.
@@ -90,7 +109,7 @@ export async function POST(req: Request) {
     userId: user.id,
     action: 'team.accept_invite',
     resource: 'organization_members',
-    metadata: { email: invite.email, role: invite.role },
+    metadata: { email: invite.email, role: invite.role, alreadyMember: Boolean(existingMember) },
   });
 
   return NextResponse.json({ ok: true, orgId: invite.org_id });

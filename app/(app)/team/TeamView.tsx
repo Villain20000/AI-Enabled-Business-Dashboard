@@ -13,7 +13,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, UserPlus, Trash2, Shield, Crown, Loader2, Mail } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, Crown, Loader2, Mail, RefreshCw } from 'lucide-react';
 import { can, type OrgRole } from '@/lib/auth/roles';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,13 +97,14 @@ export default function TeamView({ orgId, role, members, invitations }: TeamView
   const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
 
   const canManage = can(role, 'team:manage');
+  const isOwner = role === 'owner';
 
   /** Wrapper: run a mutation, toast the result, then refresh the roster. */
   async function runMutation(
     fn: () => Promise<Response>,
     okTitle: string,
     okDesc: string,
-  ): Promise<boolean> {
+  ): Promise<Record<string, unknown> | null> {
     try {
       const res = await fn();
       const data = await res.json().catch(() => ({}));
@@ -113,19 +114,37 @@ export default function TeamView({ orgId, role, members, invitations }: TeamView
           description: data?.error ?? 'Request failed',
           type: 'error',
         });
-        return false;
+        return null;
       }
       addToast({ title: okTitle, description: okDesc, type: 'success' });
       // Reload server-fetched roster.
       startTransition(() => router.refresh());
-      return true;
+      return data as Record<string, unknown>;
     } catch (err) {
       addToast({
         title: 'Error',
         description: err instanceof Error ? err.message : 'Network error',
         type: 'error',
       });
-      return false;
+      return null;
+    }
+  }
+
+  /** Copy a one-time invite URL to the clipboard. */
+  async function copyInviteLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      addToast({
+        title: 'Invite link copied',
+        description: 'Share this link with the invitee if the email does not arrive.',
+        type: 'success',
+      });
+    } catch {
+      addToast({
+        title: 'Copy failed',
+        description: 'Copy the link manually from the resend response.',
+        type: 'error',
+      });
     }
   }
 
@@ -134,17 +153,22 @@ export default function TeamView({ orgId, role, members, invitations }: TeamView
     e.preventDefault();
     if (!inviteEmail.trim()) return;
     setInviting(true);
-    const ok = await runMutation(
+    const result = await runMutation(
       () =>
         fetch('/api/team/invite', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
           body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
         }),
-      'Invitation sent',
+      'Invitation created',
       `Invited ${inviteEmail.trim()} as ${inviteRole}.`,
     );
-    if (ok) setInviteEmail('');
+    if (result) {
+      setInviteEmail('');
+      if (result.emailSent !== true && typeof result.inviteUrl === 'string') {
+        await copyInviteLink(result.inviteUrl);
+      }
+    }
     setInviting(false);
   }
 
@@ -176,6 +200,47 @@ export default function TeamView({ orgId, role, members, invitations }: TeamView
         }),
       'Member removed',
       `${email || 'Member'} has been removed.`,
+    );
+    setBusyUserId(null);
+  }
+
+  /** POST /api/team/invite/[id]/resend — resend and copy the invitation link. */
+  async function handleResend(inviteId: string, email: string) {
+    setBusyInviteId(inviteId);
+    const result = await runMutation(
+      () =>
+        fetch(`/api/team/invite/${inviteId}/resend`, {
+          method: 'POST',
+          headers: { 'x-requested-with': 'XMLHttpRequest' },
+        }),
+      'Invitation resent',
+      `Sent a fresh invite to ${email}.`,
+    );
+    if (result && typeof result.inviteUrl === 'string') {
+      await copyInviteLink(result.inviteUrl);
+    }
+    setBusyInviteId(null);
+  }
+
+  /** POST /api/team/transfer-owner — transfer ownership to another member. */
+  async function handleTransfer(userId: string, email: string) {
+    if (
+      !confirm(
+        `Transfer ownership to ${email || 'this member'}? You will become an admin and lose owner-only access.`,
+      )
+    ) {
+      return;
+    }
+    setBusyUserId(userId);
+    await runMutation(
+      () =>
+        fetch('/api/team/transfer-owner', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
+          body: JSON.stringify({ userId }),
+        }),
+      'Ownership transferred',
+      `${email || 'The member'} is now the organization owner.`,
     );
     setBusyUserId(null);
   }
@@ -303,6 +368,19 @@ export default function TeamView({ orgId, role, members, invitations }: TeamView
                               <option value="member">Member</option>
                               <option value="viewer">Viewer</option>
                             </select>
+                            {isOwner && m.role !== 'owner' && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleTransfer(m.userId, m.email)}
+                                disabled={rowBusy || pending}
+                                aria-label="Transfer ownership"
+                                title="Transfer ownership"
+                                className="text-slate-500 hover:text-amber-600"
+                              >
+                                <Crown className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -370,20 +448,32 @@ export default function TeamView({ orgId, role, members, invitations }: TeamView
                         <td className="py-3 pr-4 text-slate-500">{formatDate(inv.expiresAt)}</td>
                         <td className="py-3 text-right">
                           {canManage && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRevoke(inv.id, inv.email)}
-                              disabled={rowBusy || pending}
-                              className="text-slate-500 hover:text-rose-600"
-                            >
-                              {rowBusy ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleResend(inv.id, inv.email)}
+                                disabled={rowBusy || pending}
+                                className="text-slate-500 hover:text-blue-700"
+                              >
+                                {rowBusy ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" />
+                                )}
+                                Resend
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRevoke(inv.id, inv.email)}
+                                disabled={rowBusy || pending}
+                                className="text-slate-500 hover:text-rose-600"
+                              >
                                 <Trash2 className="h-4 w-4" />
-                              )}
-                              Revoke
-                            </Button>
+                                Revoke
+                              </Button>
+                            </div>
                           )}
                         </td>
                       </tr>

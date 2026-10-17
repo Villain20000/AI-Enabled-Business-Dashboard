@@ -41,8 +41,8 @@ const nextConfig: NextConfig = {
 
   // ESLint configuration during builds
   eslint: {
-    // Ignore ESLint errors during production builds
-    ignoreDuringBuilds: true,
+    // CI runs ESLint explicitly; keep build failures for lint errors too.
+    ignoreDuringBuilds: false,
   },
 
   // TypeScript configuration

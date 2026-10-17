@@ -15,6 +15,7 @@ import { checkCsrf } from '@/lib/security/csrf';
 import { requireOrgApi } from '@/lib/auth/requireOrg';
 import { supabaseServer } from '@/lib/supabase/server';
 import { stripe, createCheckoutSession } from '@/lib/billing/stripe';
+import { isConfiguredPriceId } from '@/lib/billing/prices';
 import { logAudit } from '@/lib/audit/log';
 
 const Body = z.object({
@@ -43,6 +44,13 @@ export async function POST(req: Request) {
   }
   const { priceId } = parsed.data;
 
+  // Never trust a client-supplied price ID. Only the two configured plan
+  // prices are valid; otherwise an owner could subscribe to an arbitrary price
+  // and have the webhook map it to a paid plan.
+  if (!isConfiguredPriceId(priceId)) {
+    return NextResponse.json({ error: 'Unknown price ID' }, { status: 400 });
+  }
+
   // Resolve the user's email from the session for the checkout customer_email.
   const supabase = await supabaseServer();
   const {
@@ -50,6 +58,21 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user?.email) {
     return NextResponse.json({ error: 'No user email on session' }, { status: 400 });
+  }
+
+  // Existing customers must change plans through the portal / subscription
+  // update path. Creating a second Checkout session would create a duplicate
+  // subscription and customer record.
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('stripe_customer_id')
+    .eq('id', ctx.orgId)
+    .single();
+  if (org?.stripe_customer_id) {
+    return NextResponse.json(
+      { error: 'Use the billing portal to change an existing subscription.' },
+      { status: 409 },
+    );
   }
 
   const session = await createCheckoutSession({

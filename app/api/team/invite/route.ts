@@ -94,11 +94,15 @@ export async function POST(req: Request) {
 
   // Best-effort: send the invite email via Supabase Auth. The redirect URL
   // carries our token so /accept-invite can resolve the org + role. Failures
-  // are non-fatal — the invitation row is the source of truth.
+  // are non-fatal — the invitation row is the source of truth — but the UI
+  // needs to know so it can offer the copy-link fallback.
+  let emailSent = false;
   try {
-    await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: inviteUrl,
     });
+    if (error) throw error;
+    emailSent = true;
   } catch (err) {
     console.error('invite email failed:', err);
   }
@@ -111,5 +115,5 @@ export async function POST(req: Request) {
     metadata: { email: email.toLowerCase(), role },
   });
 
-  return NextResponse.json({ ok: true, inviteUrl });
+  return NextResponse.json({ ok: true, inviteUrl, emailSent });
 }

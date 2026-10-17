@@ -11,6 +11,7 @@
  * @module app/(app)/team/page
  */
 import { requireOrg } from '@/lib/auth/requireOrg';
+import { getOrgPlan } from '@/lib/billing/limits';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import TeamView, { type TeamViewProps } from './TeamView';
 
@@ -19,6 +20,26 @@ export const revalidate = 0;
 
 export default async function TeamPage() {
   const ctx = await requireOrg('team:manage');
+
+  // Team management is a paid-plan feature. Seat limits also block free orgs,
+  // but hiding the page keeps the plan boundary explicit.
+  const { features } = await getOrgPlan(ctx.orgId);
+  if (!features.team) {
+    return (
+      <div className="mx-auto max-w-3xl rounded-xl border border-blue-200 bg-blue-50 p-6">
+        <h1 className="text-lg font-semibold text-slate-900">Team management is a Pro feature</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Upgrade to invite teammates and manage roles.
+        </p>
+        <a
+          href="/billing"
+          className="mt-4 inline-flex h-9 items-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          View plans
+        </a>
+      </div>
+    );
+  }
 
   // 1. Fetch all membership rows for this org.
   const { data: memberRows } = await supabaseAdmin

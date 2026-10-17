@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: public.ecr.aws/supabase/postgres:17.11.0.004
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      # Migrations must apply cleanly to a fresh database before anything else.
+      - name: Apply migrations
+        run: |
+          for migration in supabase/migrations/*.sql; do
+            echo "applying ${migration}"
+            psql -v ON_ERROR_STOP=1 -q -f "${migration}"
+          done
+      - name: Row-level security tests
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/rls.sql

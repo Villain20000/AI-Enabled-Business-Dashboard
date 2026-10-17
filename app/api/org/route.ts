@@ -12,8 +12,10 @@
  */
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { z } from 'zod';
 import { checkCsrf } from '@/lib/security/csrf';
 import { listUserOrgs } from '@/lib/auth/rbac';
+import { requireOrgApi } from '@/lib/auth/requireOrg';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logAudit } from '@/lib/audit/log';
@@ -29,6 +31,47 @@ function slugify(name: string): string {
 export async function GET() {
   const orgs = await listUserOrgs();
   return NextResponse.json({ orgs });
+}
+
+const PatchBody = z.object({
+  name: z.string().trim().min(1).max(80),
+});
+
+/** Rename the active organization (owner-only). */
+export async function PATCH(req: Request) {
+  const csrfError = checkCsrf(req);
+  if (csrfError) return csrfError;
+
+  const guard = await requireOrgApi('org:manage');
+  if ('error' in guard) return guard.error;
+  const { ctx } = guard;
+
+  const parsed = PatchBody.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Organization name is required.' }, { status: 400 });
+  }
+
+  const supabase = await supabaseServer();
+  const { data: org, error } = await supabase
+    .from('organizations')
+    .update({ name: parsed.data.name, updated_at: new Date().toISOString() })
+    .eq('id', ctx.orgId)
+    .select('id, name, slug')
+    .single();
+
+  if (error || !org) {
+    return NextResponse.json({ error: 'Failed to rename organization.' }, { status: 500 });
+  }
+
+  await logAudit({
+    orgId: ctx.orgId,
+    userId: ctx.userId,
+    action: 'org.rename',
+    resource: 'organizations',
+    metadata: { name: org.name },
+  });
+
+  return NextResponse.json({ org });
 }
 
 export async function POST(req: Request) {

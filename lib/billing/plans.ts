@@ -14,7 +14,6 @@ export interface Plan {
   id: PlanId;
   name: string;
   priceMonthly: number;
-  stripePriceId?: string;
   seats: number;
   aiCallsPerDay: number;
   apiKeys: number;
@@ -49,7 +48,6 @@ export const PLANS: Record<PlanId, Plan> = {
     id: 'pro',
     name: 'Pro',
     priceMonthly: 49,
-    stripePriceId: process.env.STRIPE_PRICE_PRO,
     seats: 10,
     aiCallsPerDay: 1000,
     apiKeys: 5,
@@ -71,7 +69,6 @@ export const PLANS: Record<PlanId, Plan> = {
     id: 'enterprise',
     name: 'Enterprise',
     priceMonthly: 299,
-    stripePriceId: process.env.STRIPE_PRICE_ENTERPRISE,
     seats: 100,
     aiCallsPerDay: Number.MAX_SAFE_INTEGER,
     apiKeys: 100,

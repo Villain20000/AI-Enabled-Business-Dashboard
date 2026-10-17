@@ -9,8 +9,15 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
 const AUTH_ROUTES = ['/login', '/signup', '/forgot-password', '/reset-password'];
-const PROTECTED_PREFIXES = ['/dashboard', '/team', '/api-keys', '/audit', '/billing', '/settings', '/onboarding', '/api/org', '/api/team', '/api/api-keys', '/api/billing', '/api/audit'];
-const PUBLIC_API_PREFIXES = ['/api/v1', '/api/billing/webhook'];
+const PROTECTED_PREFIXES = ['/dashboard', '/data', '/team', '/api-keys', '/audit', '/billing', '/settings', '/onboarding', '/select-org', '/api/org', '/api/data', '/api/team', '/api/api-keys', '/api/billing', '/api/audit', '/api/alerts'];
+const PUBLIC_API_PREFIXES = [
+  '/api/v1',
+  '/api/billing/webhook',
+  '/api/cron',
+  '/api/team/accept-invite',
+  '/api/team/invite/validate',
+  '/auth',
+];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

@@ -16,11 +16,6 @@ import { Sparkles, Database } from 'lucide-react';
 import { requireOrg } from '@/lib/auth/requireOrg';
 import { supabaseServer } from '@/lib/supabase/server';
 import { getOrgPlan } from '@/lib/billing/limits';
-import {
-  salesData as mockSales,
-  inventoryData as mockInventory,
-  kpis as mockKpis,
-} from '@/lib/mock-data';
 
 import { KpiCards } from '@/components/dashboard/KpiCards';
 import { SalesChart } from '@/components/dashboard/SalesChart';
@@ -45,13 +40,12 @@ export default async function DashboardPage() {
       supabase.from('kpis').select('*').eq('org_id', ctx.orgId).order('id'),
     ]);
 
-  // Fall back to mock data for brand-new orgs with no rows yet.
-  const salesData = salesDataDb?.length ? salesDataDb : mockSales;
-  const inventoryData = inventoryDataDb?.length ? inventoryDataDb : mockInventory;
-  const kpis = kpisDb?.length ? kpisDb : mockKpis;
-
-  // Live data present -> "connected"; otherwise mock fallback.
-  const connected = Boolean(salesDataDb?.length || inventoryDataDb?.length || kpisDb?.length);
+  // Never silently substitute another tenant's or global mock data. New orgs
+  // see an explicit empty state and can import data or load a sample.
+  const salesData = salesDataDb ?? [];
+  const inventoryData = inventoryDataDb ?? [];
+  const kpis = kpisDb ?? [];
+  const connected = Boolean(salesData.length || inventoryData.length || kpis.length);
 
   // Resolve the org's plan + effective feature flags.
   const { plan, features } = await getOrgPlan(ctx.orgId);
@@ -67,10 +61,27 @@ export default async function DashboardPage() {
         </p>
       </div>
 
+      {!connected && (
+        <div className="flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-medium text-slate-900">No data yet</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Import a CSV or load sample data to populate this dashboard.
+            </p>
+          </div>
+          <Link
+            href="/data"
+            className="inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Add data
+          </Link>
+        </div>
+      )}
+
       {/* AI Insights — gated to plans with the ai_insights feature flag. */}
-      {features.ai_insights ? (
+      {features.ai_insights && connected ? (
         <AiInsights salesData={salesData} inventoryData={inventoryData} kpis={kpis} />
-      ) : (
+      ) : features.ai_insights ? null : (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col items-center justify-center py-6 text-center">
             <Sparkles className="mb-3 h-8 w-8 text-blue-500" />

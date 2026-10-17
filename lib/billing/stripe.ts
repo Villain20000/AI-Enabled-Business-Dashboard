@@ -29,6 +29,8 @@ export async function createCheckoutSession(opts: {
     cancel_url: `${APP_URL}/billing?status=cancelled`,
     client_reference_id: opts.orgId,
     metadata: { org_id: opts.orgId },
+    subscription_data: { metadata: { org_id: opts.orgId } },
+    allow_promotion_codes: true,
   });
 }
 

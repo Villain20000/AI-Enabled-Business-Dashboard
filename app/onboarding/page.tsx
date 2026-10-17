@@ -9,12 +9,20 @@
  * @module app/onboarding/page
  */
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase/server';
 import { listUserOrgs } from '@/lib/auth/rbac';
 import { Card, CardContent } from '@/components/ui/card';
 import { CreateOrgForm } from './CreateOrgForm';
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}) {
+  const sp = await searchParams;
+  const forceNew = sp.new === '1';
+
   const supabase = await supabaseServer();
   const {
     data: { user },
@@ -25,10 +33,16 @@ export default async function OnboardingPage() {
     redirect('/login');
   }
 
-  // Already belongs to at least one org -> skip onboarding.
+  // Already belongs to at least one org -> never loop through onboarding.
+  // If there is a valid active-org cookie, go straight to the dashboard;
+  // otherwise let the user pick which org to enter.
   const orgs = await listUserOrgs();
-  if (orgs.length > 0) {
-    redirect('/dashboard');
+  if (orgs.length > 0 && !forceNew) {
+    const activeOrgId = (await cookies()).get('active_org_id')?.value;
+    if (activeOrgId && orgs.some((org) => org.id === activeOrgId)) {
+      redirect('/dashboard');
+    }
+    redirect('/select-org');
   }
 
   return (

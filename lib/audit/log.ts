@@ -7,7 +7,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export interface AuditEntry {
   orgId: string;
-  userId: string;
+  /** Authenticated actor. Null for system/webhook actions. */
+  userId?: string | null;
+  /** Human-readable system actor, e.g. "stripe-webhook". */
+  actorLabel?: string;
   action: string;
   resource: string;
   metadata?: Record<string, unknown>;
@@ -17,7 +20,8 @@ export async function logAudit(entry: AuditEntry): Promise<void> {
   try {
     await supabaseAdmin.from('audit_logs').insert({
       org_id: entry.orgId,
-      user_id: entry.userId,
+      user_id: entry.userId ?? null,
+      actor_label: entry.actorLabel ?? null,
       action: entry.action,
       resource: entry.resource,
       metadata: entry.metadata ?? {},

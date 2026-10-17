@@ -10,7 +10,7 @@
 import { redirect } from 'next/navigation';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getOrgMember, can, type OrgMembership, type Permission } from './rbac';
+import { getOrgMember, listUserOrgs, can, type OrgMembership, type Permission } from './rbac';
 
 export interface OrgContext extends OrgMembership {}
 
@@ -23,12 +23,14 @@ export async function requireOrg(permission?: Permission): Promise<OrgContext> {
   const orgId = cookieStore.get('active_org_id')?.value;
 
   if (!orgId) {
-    redirect('/onboarding');
+    const orgs = await listUserOrgs();
+    redirect(orgs.length > 0 ? '/select-org' : '/onboarding');
   }
 
   const membership = await getOrgMember(orgId);
   if (!membership) {
-    redirect('/onboarding');
+    const orgs = await listUserOrgs();
+    redirect(orgs.length > 0 ? '/select-org' : '/onboarding');
   }
 
   if (permission && !can(membership.role, permission)) {
