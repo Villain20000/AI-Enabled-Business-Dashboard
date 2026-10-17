@@ -34,13 +34,13 @@ export default async function DataPage() {
   ]);
 
   const jobs: ImportJobRow[] = (jobRows ?? []).map((job) => ({
-    id: job.id as string,
-    kind: job.kind as string,
-    status: job.status as string,
-    rowCount: (job.row_count as number) ?? 0,
-    errorCount: (job.error_count as number) ?? 0,
-    createdAt: job.created_at as string,
-    completedAt: (job.completed_at as string | null) ?? null,
+    id: job.id,
+    kind: job.kind,
+    status: job.status,
+    rowCount: job.row_count,
+    errorCount: job.error_count,
+    createdAt: job.created_at,
+    completedAt: job.completed_at,
   }));
 
   return (

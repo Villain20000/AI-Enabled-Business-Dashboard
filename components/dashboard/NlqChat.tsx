@@ -22,6 +22,9 @@ import { Markdown } from "@/components/ui/markdown"
 import { useToast } from "@/components/ui/toast-context"
 import { apiFetch } from "@/lib/api/client"
 
+// Row types generated from the database schema
+import type { InventoryRow, KpiRow, SalesRow } from "@/lib/supabase/rows"
+
 // Import icons from lucide-react
 import { MessageSquare, Send, Bot, User } from "lucide-react"
 
@@ -51,7 +54,15 @@ interface Message {
  * @param {Array} props.kpis - KPI data to provide context
  * @returns {JSX.Element} Chat interface component
  */
-export function NlqChat({ salesData, inventoryData, kpis }: { salesData: any[], inventoryData: any[], kpis: any[] }) {
+export function NlqChat({
+  salesData,
+  inventoryData,
+  kpis,
+}: {
+  salesData: SalesRow[]
+  inventoryData: InventoryRow[]
+  kpis: KpiRow[]
+}) {
   const { addToast } = useToast()
 
   // State for chat messages

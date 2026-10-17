@@ -38,9 +38,9 @@ export default async function BillingPage({
 
   const currentPlan = getPlan(org?.subscription_plan);
   const stripeCustomerId = org?.stripe_customer_id ?? null;
-  const subscriptionStatus = (org?.subscription_status as string | null) ?? 'inactive';
-  const currentPeriodEnd = (org?.current_period_end as string | null) ?? null;
-  const cancelAtPeriodEnd = Boolean(org?.cancel_at_period_end);
+  const subscriptionStatus = org?.subscription_status ?? 'inactive';
+  const currentPeriodEnd = org?.current_period_end ?? null;
+  const cancelAtPeriodEnd = org?.cancel_at_period_end ?? false;
   // Stripe is "configured" when the server client could be instantiated.
   const stripeEnabled = stripe !== null;
   // Resolve price IDs on the server; the client must never read process.env

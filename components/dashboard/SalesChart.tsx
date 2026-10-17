@@ -17,6 +17,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 // Import Recharts components for data visualization
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts"
 
+// Row type generated from the database schema
+import type { SalesRow } from "@/lib/supabase/rows"
+
 /**
  * SalesChart Component
  * 
@@ -29,10 +32,10 @@ import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } fro
  * - Interactive tooltips on hover
  * 
  * @param {Object} props - Component props
- * @param {Array} props.salesData - Array of objects with month, sales, and target properties
+ * @param {Array} props.salesData - Org-scoped sales rows (month, sales, target)
  * @returns {JSX.Element} Bar chart component
  */
-export function SalesChart({ salesData }: { salesData: any[] }) {
+export function SalesChart({ salesData }: { salesData: SalesRow[] }) {
   return (
     // Card container for the chart
     <Card className="col-span-4">

@@ -43,3 +43,23 @@ export function can(role: OrgRole | null | undefined, permission: Permission): b
   if (!role) return false;
   return ROLE_RANK[role] >= ROLE_RANK[PERMISSIONS[permission]];
 }
+
+/** Every valid role, in ascending privilege order. */
+export const ORG_ROLES: readonly OrgRole[] = ['owner', 'admin', 'member', 'viewer'];
+
+/** Type guard for a role value read from the database. */
+export function isOrgRole(value: string): value is OrgRole {
+  return (ORG_ROLES as readonly string[]).includes(value);
+}
+
+/**
+ * Convert a database role string into an `OrgRole`.
+ *
+ * The `organization_members.role` column is a checked text column, so unknown
+ * values should be impossible; callers still have to decide what to do with a
+ * value that fails the check rather than asserting it away. Returns null when
+ * the value is not a known role.
+ */
+export function parseOrgRole(value: string | null | undefined): OrgRole | null {
+  return value && isOrgRole(value) ? value : null;
+}

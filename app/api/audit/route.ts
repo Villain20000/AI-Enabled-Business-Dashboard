@@ -12,12 +12,13 @@ import { z } from 'zod';
 import { checkCsrf } from '@/lib/security/csrf';
 import { requireOrgApi } from '@/lib/auth/requireOrg';
 import { logAudit } from '@/lib/audit/log';
+import { jsonObjectSchema } from '@/lib/security/json';
 
-/** Request body schema. */
+/** Request body schema. `metadata` must be JSON-serializable. */
 const AuditBody = z.object({
   action: z.string().min(1),
   resource: z.string().min(1),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: jsonObjectSchema.optional(),
 });
 
 export async function POST(req: Request) {

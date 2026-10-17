@@ -14,6 +14,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 // Import utility function for conditional class names
 import { cn } from "@/lib/utils"
 
+// Row type generated from the database schema
+import type { InventoryRow } from "@/lib/supabase/rows"
+
 /**
  * InventoryTable Component
  * 
@@ -24,10 +27,10 @@ import { cn } from "@/lib/utils"
  * - Red (Critical): Stock is critically low
  * 
  * @param {Object} props - Component props
- * @param {Array} props.inventoryData - Array of inventory objects with product, stock, and status
+ * @param {Array} props.inventoryData - Org-scoped inventory rows (product, stock, status)
  * @returns {JSX.Element} Inventory list component
  */
-export function InventoryTable({ inventoryData }: { inventoryData: any[] }) {
+export function InventoryTable({ inventoryData }: { inventoryData: InventoryRow[] }) {
   return (
     // Card container for the inventory list
     <Card className="col-span-3">

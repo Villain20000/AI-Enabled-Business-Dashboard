@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { parseCsv, toCsv, validateCsv } from './csv';
+import { isImportKind, parseCsv, toCsv, validateCsv } from './csv';
+
+describe('isImportKind', () => {
+  it('accepts only the supported import kinds', () => {
+    expect(isImportKind('sales')).toBe(true);
+    expect(isImportKind('inventory')).toBe(true);
+    expect(isImportKind('kpis')).toBe(true);
+    expect(isImportKind('users')).toBe(false);
+    expect(isImportKind('')).toBe(false);
+  });
+});
 
 describe('parseCsv', () => {
   it('handles quoted commas and escaped quotes', () => {
@@ -33,6 +43,13 @@ describe('validateCsv', () => {
   it('rejects unknown/missing columns', () => {
     const result = validateCsv('kpis', 'title,value\nRevenue,10\n');
     expect(result.ok).toBe(false);
+  });
+
+  it('echoes the validated kind so callers can narrow the row type', () => {
+    const sales = validateCsv('sales', 'month,sales,target\nJan,1,2\n');
+    const kpis = validateCsv('kpis', 'title,value,change,trend\nRevenue,$1M,+1%,up\n');
+    expect(sales.ok && sales.kind).toBe('sales');
+    expect(kpis.ok && kpis.kind).toBe('kpis');
   });
 });
 

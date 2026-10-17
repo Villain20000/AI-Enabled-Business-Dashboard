@@ -7,6 +7,7 @@
  */
 import { createHash } from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { OrganizationRef } from '@/lib/supabase/rows';
 import type { OrgMembership } from './rbac';
 
 export const API_KEY_PREFIX = 'dcai_';
@@ -57,7 +58,7 @@ export async function authenticateApiKey(authHeader: string | null): Promise<Api
     .update({ last_used_at: new Date().toISOString() })
     .eq('id', keyRow.id);
 
-  const org = keyRow.organization as unknown as { id: string; name: string; slug: string };
+  const org: OrganizationRef = keyRow.organization;
   return {
     orgId: org.id,
     orgName: org.name,

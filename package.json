@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "db:types": "supabase gen types typescript --local --schema public | npx --yes prettier@3 --stdin-filepath lib/supabase/types.ts > lib/supabase/types.ts",
     "clean": "next clean"
   },
   "dependencies": {

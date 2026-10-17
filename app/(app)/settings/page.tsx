@@ -16,6 +16,12 @@ import SettingsView from './SettingsView';
 // Always render fresh — settings reflect live org/user state.
 export const revalidate = 0;
 
+/** Read a non-empty string field from auth metadata without asserting its type. */
+function metadataString(source: Record<string, unknown>, key: string): string | undefined {
+  const value = source[key];
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
 export default async function SettingsPage() {
   const ctx = await requireOrg();
 
@@ -27,10 +33,8 @@ export default async function SettingsPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    userName =
-      (user?.user_metadata?.name as string | undefined) ??
-      (user?.user_metadata?.full_name as string | undefined) ??
-      '';
+    const metadata: Record<string, unknown> = user?.user_metadata ?? {};
+    userName = metadataString(metadata, 'name') ?? metadataString(metadata, 'full_name') ?? '';
   } catch {
     // Non-fatal: the Profile tab simply starts with an empty name field.
   }

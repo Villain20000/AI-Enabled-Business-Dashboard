@@ -103,6 +103,21 @@ create table if not exists stripe_events (
 );
 
 -- ----------------------------------------------------------------------------
+-- Tenancy is mandatory
+--
+-- 0001 created these org-scoped tables with a nullable `org_id`, but every
+-- policy, query, and route assumes the column is present: a row without an org
+-- can never be read by anyone. Constrain the columns the application creates
+-- with an org id so the type system and the database agree.
+--
+-- If a legacy row with a null org_id exists, this fails loudly. Find it with:
+--   select count(*) from organization_invitations where org_id is null;
+-- (same for api_keys) and remove or repair the row before re-running.
+-- ----------------------------------------------------------------------------
+alter table organization_invitations alter column org_id set not null;
+alter table api_keys alter column org_id set not null;
+
+-- ----------------------------------------------------------------------------
 -- Indexes and constraints
 -- ----------------------------------------------------------------------------
 create unique index if not exists api_keys_hashed_key_unique on api_keys (hashed_key);

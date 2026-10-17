@@ -14,6 +14,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 // Import icons from lucide-react
 import { ArrowDownRight, ArrowUpRight, DollarSign, Users, AlertTriangle } from "lucide-react"
 
+// Row type generated from the database schema
+import type { KpiRow } from "@/lib/supabase/rows"
+
 /**
  * Icon Mapping
  * 
@@ -35,10 +38,10 @@ const icons = {
  * - Trend indicator (up/down arrow with percentage change)
  * 
  * @param {Object} props - Component props
- * @param {Array} props.kpis - Array of KPI objects with title, value, change, and trend
+ * @param {Array} props.kpis - Org-scoped KPI rows (title, value, change, trend)
  * @returns {JSX.Element} Grid of KPI cards
  */
-export function KpiCards({ kpis }: { kpis: any[] }) {
+export function KpiCards({ kpis }: { kpis: KpiRow[] }) {
   return (
     // Three-column grid layout for KPI cards
     <div className="grid gap-4 md:grid-cols-3">

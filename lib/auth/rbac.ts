@@ -8,7 +8,8 @@
  * @module lib/auth/rbac
  */
 import { supabaseServer } from '@/lib/supabase/server';
-import type { OrgRole } from './roles';
+import type { OrganizationRef } from '@/lib/supabase/rows';
+import { parseOrgRole, type OrgRole } from './roles';
 
 export * from './roles';
 export type { OrgRole };
@@ -42,12 +43,17 @@ export async function getOrgMember(orgId: string): Promise<OrgMembership | null>
 
   if (!membership || !membership.organization) return null;
 
-  const org = membership.organization as unknown as { id: string; name: string; slug: string };
+  // A role outside the check-constrained set must not grant access, so treat an
+  // unrecognised value as "no membership" rather than asserting it.
+  const role = parseOrgRole(membership.role);
+  if (!role) return null;
+
+  const org: OrganizationRef = membership.organization;
   return {
     orgId: org.id,
     orgName: org.name,
     orgSlug: org.slug,
-    role: membership.role as OrgRole,
+    role,
     userId: user.id,
     userEmail: user.email ?? '',
   };
@@ -71,11 +77,15 @@ export async function listUserOrgs(): Promise<
     .eq('user_id', user.id);
 
   return (data ?? [])
-    .map((m: any) => ({
-      id: m.organization?.id,
-      name: m.organization?.name,
-      slug: m.organization?.slug,
-      role: m.role as OrgRole,
-    }))
-    .filter((o) => o.id);
+    .map((m) => {
+      const role = parseOrgRole(m.role);
+      if (!m.organization || !role) return null;
+      return {
+        id: m.organization.id,
+        name: m.organization.name,
+        slug: m.organization.slug,
+        role,
+      };
+    })
+    .filter((org): org is { id: string; name: string; slug: string; role: OrgRole } => org !== null);
 }

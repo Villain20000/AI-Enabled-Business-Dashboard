@@ -111,6 +111,21 @@ This creates:
 renames are owner-only, API keys and audit logs require owner/admin, viewers
 are read-only, and AI conversations are visible only to their author.
 
+#### Generated TypeScript types
+
+`lib/supabase/types.ts` is generated from the migrations and typed into every
+Supabase client (`lib/supabase/client.ts`, `server.ts`, `admin.ts`), so queries,
+inserts, and nested selects are checked against the real schema. Regenerate it
+after changing a migration (requires the local stack to be running):
+
+```bash
+supabase start
+npm run db:types
+```
+
+`lib/supabase/rows.ts` re-exports short row aliases (`SalesRow`, `KpiRow`, …)
+for the rest of the app; components use those instead of local `any` props.
+
 #### Verifying the database layer
 
 `supabase/tests/rls.sql` seeds two tenants and asserts tenant isolation and role

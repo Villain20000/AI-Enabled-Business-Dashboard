@@ -21,6 +21,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/components/ui/toast-context"
 import { apiFetch } from "@/lib/api/client"
 
+// Row types generated from the database schema
+import type { InventoryRow, KpiRow, SalesRow } from "@/lib/supabase/rows"
+
 // Import icons from lucide-react
 import { Sparkles, Loader2 } from "lucide-react"
 
@@ -48,7 +51,15 @@ interface Insight {
  * @param {Array} props.kpis - KPI data to analyze
  * @returns {JSX.Element} AI insights generation interface
  */
-export function AiInsights({ salesData, inventoryData, kpis }: { salesData: any[], inventoryData: any[], kpis: any[] }) {
+export function AiInsights({
+  salesData,
+  inventoryData,
+  kpis,
+}: {
+  salesData: SalesRow[]
+  inventoryData: InventoryRow[]
+  kpis: KpiRow[]
+}) {
   const { addToast } = useToast()
 
   // State for storing generated insights

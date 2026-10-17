@@ -21,22 +21,37 @@ import { stripe } from '@/lib/billing/stripe';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { planForPriceId } from '@/lib/billing/prices';
 import { logAudit } from '@/lib/audit/log';
+import type { Json, Update } from '@/lib/supabase/rows';
+
+type OrganizationUpdate = Update<'organizations'>;
 
 // The webhook reads the raw body via req.text(); this requires the Node.js
 // runtime (the Edge runtime would force streaming/JSON parsing instead).
 export const runtime = 'nodejs';
 
-type SubscriptionState = {
-  stripe_subscription_id: string | null;
-  subscription_status: string | null;
-  current_period_end: string | null;
-  cancel_at_period_end: boolean;
-};
+type SubscriptionState = Pick<
+  OrganizationUpdate,
+  'stripe_subscription_id' | 'subscription_status' | 'current_period_end' | 'cancel_at_period_end'
+>;
+
+/**
+ * Unix timestamp (seconds) when the current billing period ends.
+ * Stripe reports this on the subscription in most API versions but moved it
+ * onto the subscription items in newer ones, so read both shapes and ignore
+ * anything that is not a number.
+ */
+function currentPeriodEnd(sub: Stripe.Subscription): number | undefined {
+  const direct = (sub as { current_period_end?: unknown }).current_period_end;
+  if (typeof direct === 'number') return direct;
+
+  const item = (sub.items?.data?.[0] ?? undefined) as
+    | { current_period_end?: unknown }
+    | undefined;
+  return typeof item?.current_period_end === 'number' ? item.current_period_end : undefined;
+}
 
 function subscriptionState(sub: Stripe.Subscription): SubscriptionState {
-  // `current_period_end` lives on the subscription in the Stripe API version
-  // used by this app; keep the cast local so an SDK type change is contained.
-  const periodEnd = (sub as unknown as { current_period_end?: number }).current_period_end;
+  const periodEnd = currentPeriodEnd(sub);
   return {
     stripe_subscription_id: sub.id,
     subscription_status: sub.status,
@@ -58,7 +73,7 @@ async function orgIdForCustomer(customerId: string | null): Promise<string | nul
 async function writeBillingAudit(opts: {
   orgId: string | null;
   action: string;
-  metadata: Record<string, unknown>;
+  metadata: Json;
 }) {
   if (!opts.orgId) {
     console.error('billing webhook could not resolve organization', opts.metadata);
@@ -135,7 +150,7 @@ export async function POST(req: Request) {
           planId = planForPriceId(sub.items.data[0]?.price?.id) as 'pro' | 'enterprise' | null;
         }
 
-        const updates: Record<string, unknown> = {
+        const updates: OrganizationUpdate = {
           stripe_customer_id: customerId,
           updated_at: new Date().toISOString(),
           ...(state ?? {}),
@@ -162,7 +177,7 @@ export async function POST(req: Request) {
 
         const priceId = sub.items.data[0]?.price?.id;
         const planId = planForPriceId(priceId);
-        const updates: Record<string, unknown> = {
+        const updates: OrganizationUpdate = {
           ...subscriptionState(sub),
           updated_at: new Date().toISOString(),
         };

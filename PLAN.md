@@ -672,6 +672,14 @@ A feature is done only when:
 - [x] `supabase/tests/rls.sql` (24 assertions) and a CI `database` job that
       applies the migrations to a clean Supabase Postgres image and runs the
       RLS suite.
+- [x] Generated Supabase types (`lib/supabase/types.ts`, `npm run db:types`)
+      wired into the browser/server/admin clients, with row aliases in
+      `lib/supabase/rows.ts`. Every `any[]` prop and `as unknown as` cast in the
+      dashboard, data, audit, team, billing, chat, and alert paths is gone.
+- [x] Tenancy columns the application always populates
+      (`organization_invitations.org_id`, `api_keys.org_id`) are `NOT NULL`;
+      role strings read from the database go through a checked
+      `parseOrgRole()` instead of an assertion.
 
 ### Still open
 
@@ -682,8 +690,8 @@ A feature is done only when:
       persistent auth rate limiting.
 - [ ] AI streaming and a conversation-history UI.
 - [ ] Audit immutability/hash chain, export, search, and legal hold.
-- [ ] Generated Supabase types, demo seed, Docker deployment config, and E2E
-      test suites (the RLS suite now exists).
+- [ ] Demo seed, Docker deployment config, and E2E test suites (the RLS suite
+      and generated types now exist).
 - [ ] Error tracking, structured logging, backup/restore drills, and production
       runbooks.
 
@@ -697,3 +705,6 @@ A feature is done only when:
   Postgres 17 database (all 17 tables created).
 - `supabase/tests/rls.sql` — 24 assertions pass against that database; the
   suite is also run in CI.
+- Mutations that carried loose casts (audit metadata, Stripe webhook updates,
+  CSV import/export, alert rules) were re-checked with `npm run typecheck`
+  against the generated types.

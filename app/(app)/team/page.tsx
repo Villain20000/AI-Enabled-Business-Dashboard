@@ -11,6 +11,7 @@
  * @module app/(app)/team/page
  */
 import { requireOrg } from '@/lib/auth/requireOrg';
+import { parseOrgRole } from '@/lib/auth/roles';
 import { getOrgPlan } from '@/lib/billing/limits';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import TeamView, { type TeamViewProps } from './TeamView';
@@ -61,8 +62,10 @@ export default async function TeamPage() {
     members.push({
       userId: m.user_id,
       email,
-      role: m.role,
-      createdAt: m.created_at,
+      // The column is check-constrained, but fall back to the least-privileged
+      // role rather than trusting an unexpected value.
+      role: parseOrgRole(m.role) ?? 'viewer',
+      createdAt: m.created_at ?? '',
     });
   }
 
@@ -76,7 +79,7 @@ export default async function TeamPage() {
   const invitations: TeamViewProps['invitations'] = (inviteRows ?? []).map((i) => ({
     id: i.id,
     email: i.email,
-    role: i.role,
+    role: parseOrgRole(i.role) ?? 'viewer',
     expiresAt: i.expires_at,
   }));
 

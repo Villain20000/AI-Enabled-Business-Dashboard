@@ -41,6 +41,33 @@ interface Insight {
 }
 
 /**
+ * One insight as produced by the model. The model is untrusted input, so the
+ * fields are validated (accepting the scalar types it tends to emit) instead of
+ * being asserted into `Insight`.
+ */
+const InsightSchema = z.object({
+  title: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  description: z.union([z.string(), z.number(), z.boolean()]).optional(),
+});
+
+/**
+ * Normalise a parsed model response into insights.
+ * Accepts a bare object or an array of objects and silently drops entries that
+ * are not objects or that carry no usable text.
+ */
+function toInsights(value: unknown): Insight[] {
+  const candidates = Array.isArray(value) ? value : [value];
+  return candidates.flatMap((candidate) => {
+    const parsed = InsightSchema.safeParse(candidate);
+    if (!parsed.success) return [];
+    const title = String(parsed.data.title ?? '').trim();
+    const description = String(parsed.data.description ?? '').trim();
+    if (!title && !description) return [];
+    return [{ title: title || 'Insight', description }];
+  });
+}
+
+/**
  * POST Handler for AI Insights Generation
  *
  * Analyzes dashboard data (sales, inventory, KPIs) and generates 3 key
@@ -128,46 +155,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to generate insights' }, { status: 500 });
   }
 
-  // 10. Defensive JSON parsing with regex fallback
+  // 10. Defensive parsing: validated JSON, then a regex extraction, then the
+  // raw text as a last resort.
   let insights: Insight[] = [];
   try {
-    const parsedJson = JSON.parse(raw);
-    if (Array.isArray(parsedJson)) {
-      insights = parsedJson
-        .filter((i): i is Record<string, unknown> => typeof i === 'object' && i !== null)
-        .map((i) => ({
-          title: String(i.title ?? ''),
-          description: String(i.description ?? ''),
-        }));
-    } else if (parsedJson && typeof parsedJson === 'object') {
-      insights = [
-        {
-          title: String((parsedJson as Record<string, unknown>).title ?? ''),
-          description: String((parsedJson as Record<string, unknown>).description ?? ''),
-        },
-      ];
-    }
+    insights = toInsights(JSON.parse(raw));
   } catch {
-    // Attempt to extract a JSON array via regex
     const match = raw.match(/\[[\s\S]*\]/);
     if (match) {
       try {
-        const extracted = JSON.parse(match[0]);
-        if (Array.isArray(extracted)) {
-          insights = extracted
-            .filter((i): i is Record<string, unknown> => typeof i === 'object' && i !== null)
-            .map((i) => ({
-              title: String(i.title ?? ''),
-              description: String(i.description ?? ''),
-            }));
-        }
+        insights = toInsights(JSON.parse(match[0]));
       } catch {
-        // Fall through to raw-text fallback below
+        // Fall through to the raw-text fallback below.
       }
     }
-    if (insights.length === 0) {
-      insights = [{ title: 'Insight', description: raw.trim() }];
-    }
+  }
+  if (insights.length === 0) {
+    insights = [{ title: 'Insight', description: raw.trim() }];
   }
 
   // 8. Meter usage

@@ -18,12 +18,15 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import type { Json } from '@/lib/supabase/rows';
 
+/** Display model for one audit entry (the database row plus a resolved email). */
 export interface AuditLogRow {
   id: string;
   action: string;
   resource: string;
-  metadata: Record<string, unknown> | null;
+  /** Stored `metadata` jsonb column. */
+  metadata: Json | null;
   createdAt: string;
   userEmail: string;
   actorLabel: string | null;

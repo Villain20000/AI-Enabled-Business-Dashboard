@@ -10,8 +10,46 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logAudit } from '@/lib/audit/log';
 import { recordUsage } from '@/lib/usage';
+import type { AlertRuleRow } from '@/lib/supabase/rows';
 import { deliverAlert } from './deliver';
 import { evaluateRules, type AlertData, type AlertRuleInput } from './evaluate';
+
+/**
+ * Rule shape the runner works with: the evaluator's input plus the cooldown
+ * bookkeeping the database owns. `method` is narrowed to the delivery channels
+ * `deliverAlert` supports so an unexpected column value can never be passed
+ * through as if it were a channel.
+ */
+type RunnableRule = AlertRuleInput & {
+  last_triggered_at: string | null;
+  cooldown_seconds: number;
+};
+
+type RuleRow = Pick<
+  AlertRuleRow,
+  | 'id'
+  | 'kpi'
+  | 'condition'
+  | 'threshold'
+  | 'method'
+  | 'destination'
+  | 'last_triggered_at'
+  | 'cooldown_seconds'
+>;
+
+/** Narrow a raw alert_rules row into the runner's shape. */
+function toAlertRule(row: RuleRow): RunnableRule {
+  return {
+    id: row.id,
+    kpi: row.kpi,
+    condition: row.condition,
+    threshold: row.threshold,
+    method: row.method === 'slack' ? 'slack' : 'email',
+    destination: row.destination,
+    last_triggered_at: row.last_triggered_at,
+    cooldown_seconds: row.cooldown_seconds,
+  };
+}
 
 export interface AlertRunResult {
   ruleId: string;
@@ -46,11 +84,7 @@ export async function runAlertsForOrg(orgId: string): Promise<AlertRunSummary> {
 
   if (rulesError) throw new Error(rulesError.message);
 
-  const rules = (ruleRows ?? []) as unknown as (AlertRuleInput & {
-    enabled: boolean;
-    last_triggered_at: string | null;
-    cooldown_seconds: number;
-  })[];
+  const rules = (ruleRows ?? []).map(toAlertRule);
 
   const [{ data: sales }, { data: inventory }, { data: kpis }] = await Promise.all([
     supabaseAdmin.from('sales_data').select('*').eq('org_id', orgId),
@@ -59,9 +93,9 @@ export async function runAlertsForOrg(orgId: string): Promise<AlertRunSummary> {
   ]);
 
   const data: AlertData = {
-    sales: (sales ?? []) as Record<string, unknown>[],
-    inventory: (inventory ?? []) as Record<string, unknown>[],
-    kpis: (kpis ?? []) as Record<string, unknown>[],
+    sales: sales ?? [],
+    inventory: inventory ?? [],
+    kpis: kpis ?? [],
   };
 
   const evaluated = evaluateRules(rules, data);
@@ -69,10 +103,7 @@ export async function runAlertsForOrg(orgId: string): Promise<AlertRunSummary> {
   const now = Date.now();
 
   for (const result of evaluated) {
-    const rule = result.rule as AlertRuleInput & {
-      last_triggered_at: string | null;
-      cooldown_seconds: number;
-    };
+    const rule = result.rule;
 
     await supabaseAdmin
       .from('alert_rules')
@@ -196,7 +227,11 @@ export async function runAlertsForAllOrgs(): Promise<Record<string, AlertRunSumm
     .select('org_id')
     .eq('enabled', true);
 
-  const orgIds = Array.from(new Set((data ?? []).map((row) => row.org_id as string)));
+  // `alert_rules.org_id` predates multi-tenancy and is still nullable; a rule
+  // with no organization has nothing to evaluate against.
+  const orgIds = Array.from(
+    new Set((data ?? []).map((row) => row.org_id).filter((id): id is string => Boolean(id))),
+  );
   const summaries: Record<string, AlertRunSummary> = {};
   for (const orgId of orgIds) {
     summaries[orgId] = await runAlertsForOrg(orgId);

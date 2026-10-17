@@ -3,6 +3,7 @@
  *
  * @module lib/alerts/evaluate
  */
+import type { InventoryRow, KpiRow, SalesRow } from '@/lib/supabase/rows';
 
 export type AlertCondition = '>' | '<' | '>=' | '<=' | '==';
 
@@ -15,10 +16,15 @@ export interface AlertRuleInput {
   destination: string;
 }
 
+/**
+ * The slice of each data table the evaluator actually reads. Using `Pick`
+ * rather than the full row keeps the pure function easy to test while still
+ * rejecting rows whose columns have been renamed or retyped.
+ */
 export interface AlertData {
-  sales: Record<string, unknown>[];
-  inventory: Record<string, unknown>[];
-  kpis: Record<string, unknown>[];
+  sales: Pick<SalesRow, 'month' | 'sales' | 'target'>[];
+  inventory: Pick<InventoryRow, 'product' | 'stock' | 'status'>[];
+  kpis: Pick<KpiRow, 'title' | 'value' | 'change' | 'trend'>[];
 }
 
 function numberFrom(value: unknown): number | null {
@@ -83,17 +89,22 @@ export function conditionMatches(
   }
 }
 
-export interface EvaluationResult {
-  rule: AlertRuleInput;
+/**
+ * Evaluation of one rule. Generic over the rule type so callers that pass a
+ * richer rule (for example the runner, which also carries cooldown state) get
+ * that same type back out of the result.
+ */
+export interface EvaluationResult<T extends AlertRuleInput = AlertRuleInput> {
+  rule: T;
   value: number | null;
   triggered: boolean;
 }
 
 /** Evaluate all rules against a single data snapshot. */
-export function evaluateRules(
-  rules: AlertRuleInput[],
+export function evaluateRules<T extends AlertRuleInput>(
+  rules: T[],
   data: AlertData,
-): EvaluationResult[] {
+): EvaluationResult<T>[] {
   return rules.map((rule) => {
     const value = resolveMetric(rule.kpi, data);
     return {

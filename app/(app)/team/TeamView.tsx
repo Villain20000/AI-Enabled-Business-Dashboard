@@ -42,6 +42,14 @@ export interface TeamViewProps {
   invitations: TeamInvitation[];
 }
 
+/** Payload returned by the /api/team/* routes this view calls. */
+interface TeamMutationResponse {
+  error?: string;
+  /** One-time acceptance URL returned by invite + resend. */
+  inviteUrl?: string;
+  emailSent?: boolean;
+}
+
 const ROLE_BADGE: Record<OrgRole, string> = {
   owner: 'bg-amber-50 text-amber-700 border-amber-200',
   admin: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -104,14 +112,14 @@ export default function TeamView({ orgId, role, members, invitations }: TeamView
     fn: () => Promise<Response>,
     okTitle: string,
     okDesc: string,
-  ): Promise<Record<string, unknown> | null> {
+  ): Promise<TeamMutationResponse | null> {
     try {
       const res = await fn();
-      const data = await res.json().catch(() => ({}));
+      const data: TeamMutationResponse = await res.json().catch(() => ({}));
       if (!res.ok) {
         addToast({
           title: 'Error',
-          description: data?.error ?? 'Request failed',
+          description: data.error ?? 'Request failed',
           type: 'error',
         });
         return null;
@@ -119,7 +127,7 @@ export default function TeamView({ orgId, role, members, invitations }: TeamView
       addToast({ title: okTitle, description: okDesc, type: 'success' });
       // Reload server-fetched roster.
       startTransition(() => router.refresh());
-      return data as Record<string, unknown>;
+      return data;
     } catch (err) {
       addToast({
         title: 'Error',

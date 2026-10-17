@@ -4,6 +4,7 @@
  * @module lib/audit/log
  */
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/supabase/rows';
 
 export interface AuditEntry {
   orgId: string;
@@ -13,7 +14,8 @@ export interface AuditEntry {
   actorLabel?: string;
   action: string;
   resource: string;
-  metadata?: Record<string, unknown>;
+  /** Structured context stored in the `metadata` jsonb column. */
+  metadata?: Json;
 }
 
 export async function logAudit(entry: AuditEntry): Promise<void> {

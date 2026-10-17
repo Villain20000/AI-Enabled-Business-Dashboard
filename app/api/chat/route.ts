@@ -118,7 +118,7 @@ export async function POST(req: Request) {
     if (createError || !created) {
       return NextResponse.json({ error: 'Could not start a conversation' }, { status: 500 });
     }
-    conversationId = created.id as string;
+    conversationId = created.id;
   }
 
   await supabase.from('ai_messages').insert({

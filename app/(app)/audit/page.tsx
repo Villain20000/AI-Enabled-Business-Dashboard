@@ -71,13 +71,11 @@ export default async function AuditLogPage({
     .eq('org_id', ctx.orgId)
     .order('action', { ascending: true });
 
-  const actions = Array.from(
-    new Set((actionRows ?? []).map((r: { action: string }) => r.action)),
-  );
+  const actions = Array.from(new Set((actionRows ?? []).map((r) => r.action)));
 
   // Resolve user emails for the current page via the admin client.
   const userIds = Array.from(
-    new Set((rows ?? []).map((r) => r.user_id).filter(Boolean) as string[]),
+    new Set((rows ?? []).map((r) => r.user_id).filter((id): id is string => Boolean(id))),
   );
   const emailMap = new Map<string, string>();
   await Promise.all(
@@ -90,13 +88,13 @@ export default async function AuditLogPage({
   );
 
   const logs = (rows ?? []).map((r) => ({
-    id: r.id as string,
-    action: r.action as string,
-    resource: r.resource as string,
-    metadata: r.metadata as Record<string, unknown> | null,
-    createdAt: r.created_at as string,
-    userEmail: (r.user_id && emailMap.get(r.user_id as string)) ?? '—',
-    actorLabel: (r.actor_label as string | null) ?? null,
+    id: r.id,
+    action: r.action,
+    resource: r.resource,
+    metadata: r.metadata,
+    createdAt: r.created_at ?? '',
+    userEmail: (r.user_id && emailMap.get(r.user_id)) ?? '—',
+    actorLabel: r.actor_label,
   }));
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));

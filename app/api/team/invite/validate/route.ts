@@ -52,14 +52,12 @@ export async function GET(req: Request) {
     );
   }
 
-  const org = invite.organization as unknown as { name?: string } | null;
-
   return NextResponse.json({
     invitation: {
       email: invite.email,
       role: invite.role,
       expiresAt: invite.expires_at,
-      orgName: org?.name ?? 'the organization',
+      orgName: invite.organization?.name ?? 'the organization',
     },
   });
 }

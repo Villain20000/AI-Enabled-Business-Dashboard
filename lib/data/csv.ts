@@ -13,6 +13,11 @@ export type ImportKind = 'sales' | 'inventory' | 'kpis';
 
 export const IMPORT_KINDS: ImportKind[] = ['sales', 'inventory', 'kpis'];
 
+/** Narrow an untrusted string (query param, form field) to an `ImportKind`. */
+export function isImportKind(value: string): value is ImportKind {
+  return (IMPORT_KINDS as readonly string[]).includes(value);
+}
+
 export interface CsvRowError {
   row: number;
   message: string;
@@ -81,10 +86,20 @@ const KpiRow = z.object({
   trend: z.enum(['up', 'down']),
 });
 
-export type ParsedImport =
-  | { kind: 'sales'; rows: z.infer<typeof SalesRow>[] }
-  | { kind: 'inventory'; rows: z.infer<typeof InventoryRow>[] }
-  | { kind: 'kpis'; rows: z.infer<typeof KpiRow>[] };
+export type SalesImportRow = z.infer<typeof SalesRow>;
+export type InventoryImportRow = z.infer<typeof InventoryRow>;
+export type KpiImportRow = z.infer<typeof KpiRow>;
+
+/**
+ * Successful validation result, discriminated by `kind` so callers get the
+ * right row type for the import they asked for without casting.
+ */
+export type ValidImport =
+  | { ok: true; kind: 'sales'; data: SalesImportRow[] }
+  | { ok: true; kind: 'inventory'; data: InventoryImportRow[] }
+  | { ok: true; kind: 'kpis'; data: KpiImportRow[] };
+
+export type CsvValidationResult = ValidImport | { ok: false; errors: CsvRowError[] };
 
 export const MAX_IMPORT_ROWS = 5000;
 
@@ -94,10 +109,7 @@ export const MAX_IMPORT_ROWS = 5000;
  * Returns row-level errors instead of throwing so the UI can show all malformed
  * rows at once.
  */
-export function validateCsv(
-  kind: ImportKind,
-  input: string,
-): { ok: true; data: ParsedImport['rows'] } | { ok: false; errors: CsvRowError[] } {
+export function validateCsv(kind: ImportKind, input: string): CsvValidationResult {
   const rows = parseCsv(input.replace(/^\uFEFF/, ''));
   if (rows.length < 2) {
     return { ok: false, errors: [{ row: 0, message: 'CSV must include a header and at least one data row.' }] };
@@ -148,7 +160,12 @@ export function validateCsv(
   });
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, data: parsed as ParsedImport['rows'] };
+
+  // The schema selected above matches the requested kind; this is the single
+  // place where that pairing is asserted, so callers get a typed result.
+  if (kind === 'sales') return { ok: true, kind, data: parsed as SalesImportRow[] };
+  if (kind === 'inventory') return { ok: true, kind, data: parsed as InventoryImportRow[] };
+  return { ok: true, kind, data: parsed as KpiImportRow[] };
 }
 
 /** Escape one CSV field. */
