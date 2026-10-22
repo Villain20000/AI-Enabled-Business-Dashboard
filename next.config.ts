@@ -17,11 +17,26 @@ import type {NextConfig} from 'next';
  * These mitigate common web vulnerabilities (XSS, clickjacking, MIME sniffing,
  * protocol downgrade, etc.) and lock down the CSP to known-good origins.
  */
+// Allow the browser to reach a self-hosted/local Supabase instance when the
+// configured URL is not a *.supabase.co project (already covered by the
+// wildcard). Production deployments using Supabase Cloud are unaffected.
+const supabaseConnectSrc = (() => {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.hostname.endsWith('.supabase.co')) return '';
+    return ` ${url.origin} ws://${url.host} wss://${url.host}`;
+  } catch {
+    return '';
+  }
+})();
+
 const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://api.stripe.com wss://*.supabase.co; frame-src https://js.stripe.com; base-uri 'self'; form-action 'self'",
+      `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://api.stripe.com wss://*.supabase.co${supabaseConnectSrc}; frame-src https://js.stripe.com; base-uri 'self'; form-action 'self'`,
   },
   {key: 'X-Frame-Options', value: 'DENY'},
   {key: 'X-Content-Type-Options', value: 'nosniff'},
